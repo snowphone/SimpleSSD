@@ -392,9 +392,11 @@ void PageMapping::calculateVictimWeight(
     case POLICY_DCHOICE:
       for (auto &iter : blocks) {
         if (iter.second.getNextWritePageIndex() != param.pagesInBlock) {
+          // mjo: Pass not fully written blocks
           continue;
         }
 
+        // mjo: Store fully written blocks
         weight.push_back({iter.first, iter.second.getValidPageCountRaw()});
       }
 
@@ -425,6 +427,9 @@ void PageMapping::selectVictimBlock(std::vector<uint32_t> &list,
       (EVICT_POLICY)conf.readInt(CONFIG_FTL, FTL_GC_EVICT_POLICY);
   static uint32_t dChoiceParam =
       conf.readUint(CONFIG_FTL, FTL_GC_D_CHOICE_PARAM);
+  // mjo: nBlocks variable is loaded from SSD configuration file.
+  // In many cases, GCReclaimBlocks value is set to 1, so the code evicts
+  // only one block
   uint64_t nBlocks = conf.readUint(CONFIG_FTL, FTL_GC_RECLAIM_BLOCK);
   std::vector<std::pair<uint32_t, float>> weight;
 
@@ -451,6 +456,7 @@ void PageMapping::selectVictimBlock(std::vector<uint32_t> &list,
   }
 
   // Calculate weights of all blocks
+  // mjo: Get fully written blocks with their valid page ratio
   calculateVictimWeight(weight, policy, tick);
 
   if (policy == POLICY_RANDOM || policy == POLICY_DCHOICE) {
@@ -483,6 +489,7 @@ void PageMapping::selectVictimBlock(std::vector<uint32_t> &list,
   // Select victims from the blocks with the lowest weight
   nBlocks = MIN(nBlocks, weight.size());
 
+  // mjo: Store logical block numbers
   for (uint64_t i = 0; i < nBlocks; i++) {
     list.push_back(weight.at(i).first);
   }
@@ -508,6 +515,7 @@ void PageMapping::doGarbageCollection(std::vector<uint32_t> &blocksToReclaim,
   }
 
   // For all blocks to reclaim, collecting request structure only
+  // mjo: blocksToReclaim is sorted by valid-page-ratio
   for (auto &iter : blocksToReclaim) {
     auto block = blocks.find(iter);
 
