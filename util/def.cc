@@ -74,7 +74,10 @@ Request::_Request(uint32_t iocount)
 Request::_Request(uint32_t iocount, ICL::Request &r)
     : reqID(r.reqID),
       reqSubID(r.reqSubID),
+      // mjo: Convert page-level to superpage level 
+      // since iocount stands for page# per superpage
       lpn(r.range.slpn / iocount),
+      // mjo: Represents pages in a superpage. Each bit maps to a page
       ioFlag(iocount) {
   ioFlag.set(r.range.slpn % iocount);
 }

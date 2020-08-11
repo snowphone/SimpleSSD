@@ -286,7 +286,9 @@ void Namespace::write(SQEntryWrapper &req, RequestFunction &func) {
   bool err = false;
 
   CQEntryWrapper resp(req);
+  // mjo: slba means Starting Logical Block Address
   uint64_t slba = ((uint64_t)req.entry.dword11 << 32) | req.entry.dword10;
+  // mjo: nlb means the Number of Logical Blocks
   uint16_t nlb = (req.entry.dword12 & 0xFFFF) + 1;
 
   if (!attached) {
@@ -355,8 +357,8 @@ void Namespace::write(SQEntryWrapper &req, RequestFunction &func) {
     IOContext *pContext = new IOContext(func, resp);
 
     pContext->beginAt = getTick();
-    pContext->slba = slba;
-    pContext->nlb = nlb;
+    pContext->slba = slba;		// mjo: Simply saying, slba == array pointer
+    pContext->nlb = nlb;		// mjo: Simply saying, nlb == array length
 
     CPUContext *pCPU =
         new CPUContext(doRead, pContext, CPU::NVME__NAMESPACE, CPU::WRITE);

@@ -79,6 +79,7 @@ bool PageMapping::initialize() {
   debugprint(LOG_FTL_PAGE_MAPPING, "Initialization started");
 
   nTotalLogicalPages = param.totalLogicalBlocks * param.pagesInBlock;
+  //mjo: By modifying this field, you can accelerate the first GC
   nPagesToWarmup =
       nTotalLogicalPages * conf.readFloat(CONFIG_FTL, FTL_FILL_RATIO);
   nPagesToInvalidate =
@@ -643,6 +644,7 @@ void PageMapping::readInternal(Request &req, uint64_t &tick) {
 
     for (uint32_t idx = 0; idx < bitsetSize; idx++) {
       if (req.ioFlag.test(idx) || !bRandomTweak) {
+        // mjo: block#, page#
         auto &mapping = mappingList->second.at(idx);
 
         if (mapping.first < param.totalPhysicalBlocks &&
@@ -650,6 +652,8 @@ void PageMapping::readInternal(Request &req, uint64_t &tick) {
           palRequest.blockIndex = mapping.first;
           palRequest.pageIndex = mapping.second;
 
+          // mjo: Random I/O tweak is used when superpage mode is enabled.
+          // The authors said it helps random write performance, I'm not sure what it is though.
           if (bRandomTweak) {
             palRequest.ioFlag.reset();
             palRequest.ioFlag.set(idx);
@@ -680,17 +684,21 @@ void PageMapping::readInternal(Request &req, uint64_t &tick) {
 }
 
 void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
-  PAL::Request palRequest(req);
+  PAL::Request palRequest(req);	// mjo: Copy ioFlag. IOFlag means pages in a superpage
   std::unordered_map<uint32_t, Block>::iterator block;
-  auto mappingList = table.find(req.lpn);
+  // mjo: table holds LPN -> PPN mappings
+  auto mappingList = table.find(req.lpn);	// mjo: a vector of <block#, page# in a block>
   uint64_t beginAt;
   uint64_t finishedAt = tick;
   bool readBeforeWrite = false;
 
+  // mjo: Step 1: Invalidate previously written  page(s).
+
   if (mappingList != table.end()) {
     for (uint32_t idx = 0; idx < bitsetSize; idx++) {
+      // Do IO operation per page, not superpage!
       if (req.ioFlag.test(idx) || !bRandomTweak) {
-        auto &mapping = mappingList->second.at(idx);
+        auto &mapping = mappingList->second.at(idx);	// mjo: <block#, page# in block>
 
         if (mapping.first < param.totalPhysicalBlocks &&
             mapping.second < param.pagesInBlock) {
@@ -698,6 +706,9 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
 
           // Invalidate current page
           block->second.invalidate(mapping.second, idx);
+
+          // mjo: Since SSDs cannnot update data, 
+          // we need to invalidate the previous data before overwrite them.
         }
       }
     }
@@ -716,8 +727,11 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
     mappingList = ret.first;
   }
 
+  // mjo: Step 2: Write data to new page(s)
+
   // Write data to free block
-  block = blocks.find(getLastFreeBlock(req.ioFlag));
+  // mjo: Get a free block from the free block list.
+  block = blocks.find(getLastFreeBlock(req.ioFlag)); // mjo: <ppn of the block, Block instance>
 
   if (block == blocks.end()) {
     panic("No such block");
@@ -740,7 +754,9 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
   }
 
   for (uint32_t idx = 0; idx < bitsetSize; idx++) {
+    // Do IO operation per page, not superpage!
     if (req.ioFlag.test(idx) || !bRandomTweak) {
+      // mjo: Use empty page in the same block instead of get a page from another block.
       uint32_t pageIndex = block->second.getNextWritePageIndex(idx);
       auto &mapping = mappingList->second.at(idx);
 

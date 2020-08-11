@@ -45,6 +45,7 @@ GenericCache::GenericCache(ConfigReader &c, FTL::FTL *f, DRAM::AbstractDRAM *d)
       dist(std::uniform_int_distribution<uint32_t>(0, waySize - 1)) {
   uint64_t cacheSize = conf.readUint(CONFIG_ICL, ICL_CACHE_SIZE);
 
+  // mjo: It represents NAND page size
   lineSize = superPageSize / lineCountInSuperPage;
 
   if (lineSize != superPageSize) {
@@ -554,15 +555,22 @@ bool GenericCache::write(Request &req, uint64_t &tick) {
              "WRITE | REQ %7u-%-4u | LCA %" PRIu64 " | SIZE %" PRIu64,
              req.reqID, req.reqSubID, req.range.slpn, req.length);
 
+  // mjo: lineCountInSuperPage: # of pages in a superpage
+  // Thus, this constructor converts sequential page-level lpn to (superpage#, page offset in superpage)
+  // Bits in an ioFlag field represent pages in a superpage
   FTL::Request reqInternal(lineCountInSuperPage, req);
 
+  // mjo: lineSize represents NAND page size
   if (req.length < lineSize) {
     dirty = true;
   }
   else {
+    // mjo: pFTL is a PageMapping instance
     pFTL->write(reqInternal, flash);
   }
 
+  // mjo: Write-through caching.
+  // Easy to implement, and the performance-gap is not that big.
   if (useWriteCaching) {
     uint32_t setIdx = calcSetIndex(req.range.slpn);
     uint32_t wayIdx;

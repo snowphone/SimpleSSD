@@ -104,13 +104,14 @@ void ICL::write(Request &req, uint64_t &tick) {
   reqInternal.reqID = req.reqID;
   reqInternal.offset = req.offset;
 
+  //mjo: Page-level write request
   for (uint64_t i = 0; i < req.range.nlp; i++) {
     beginAt = tick;
 
     reqInternal.reqSubID = i + 1;
     reqInternal.range.slpn = req.range.slpn + i;
     reqInternal.length = MIN(reqRemain, logicalPageSize - reqInternal.offset);
-    pCache->write(reqInternal, beginAt);
+    pCache->write(reqInternal, beginAt);	// mjo: Write to cache. It goes to GenericCache::write
     reqRemain -= reqInternal.length;
     reqInternal.offset = 0;
 

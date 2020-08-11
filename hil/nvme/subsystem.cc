@@ -111,10 +111,11 @@ void Subsystem::convertUnit(Namespace *ns, uint64_t slba, uint64_t nlblk,
   uint64_t nlp;
   uint64_t off;
 
+  // mjo: (starting) lba is an index and the size of each entry is info->lbaSize
   if (lbaratio == 0) {
     lbaratio = info->lbaSize / logicalPageSize;
 
-    slpn = slba * lbaratio;
+    slpn = slba * lbaratio;	// mjo: Page-level
     nlp = nlblk * lbaratio;
 
     req.range.slpn = slpn + info->range.slpn;
@@ -123,10 +124,11 @@ void Subsystem::convertUnit(Namespace *ns, uint64_t slba, uint64_t nlblk,
     req.length = nlblk * info->lbaSize;
   }
   else {
-    slpn = slba / lbaratio;
+    slpn = slba / lbaratio;	// mjo: Page-level
     off = slba % lbaratio;
     nlp = (nlblk + off + lbaratio - 1) / lbaratio;
 
+	// mjo: I think info->range.slpn is not important since the granularity of slpn and info->range.slpn is same.
     req.range.slpn = slpn + info->range.slpn;
     req.range.nlp = nlp;
     req.offset = off * info->lbaSize;
@@ -201,6 +203,7 @@ bool Subsystem::createNamespace(uint32_t nsid, Namespace::Information *info) {
   // Allocated unallocated area to namespace
   for (auto iter = unallocated.begin(); iter != unallocated.end(); iter++) {
     if (iter->nlp >= requestedLogicalPages) {
+      // mjo: I guess this is the initialization point of info->range
       info->range = *iter;
       info->range.nlp = requestedLogicalPages;
 
@@ -434,7 +437,9 @@ uint32_t Subsystem::validNamespaceCount() {
 
 void Subsystem::read(Namespace *ns, uint64_t slba, uint64_t nlblk,
                      DMAFunction &func, void *context) {
+  // mjo: Here the controversial "req" object is initialized
   Request *req = new Request(func, context);
+
   DMAFunction doRead = [this](uint64_t, void *context) {
     auto req = (Request *)context;
 
@@ -450,7 +455,9 @@ void Subsystem::read(Namespace *ns, uint64_t slba, uint64_t nlblk,
 
 void Subsystem::write(Namespace *ns, uint64_t slba, uint64_t nlblk,
                       DMAFunction &func, void *context) {
+  // mjo: Here the controversial "req" object is initialized
   Request *req = new Request(func, context);
+
   DMAFunction doWrite = [this](uint64_t, void *context) {
     auto req = (Request *)context;
 

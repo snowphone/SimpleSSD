@@ -298,10 +298,13 @@ bool Block::write(uint32_t pageIndex, uint64_t lpn, uint32_t idx,
                   uint64_t tick) {
   bool write = false;
 
+  // mjo: ioUnitInPage == 1 means superpage is disabled
   if (ioUnitInPage == 1 && idx == 0) {
+    // mjo: Super page disabled
     write = pErasedBits->test(pageIndex);
   }
   else if (idx < ioUnitInPage) {
+    // mjo: Superpage enabled
     write = erasedBits.at(pageIndex).test(idx);
   }
   else {
