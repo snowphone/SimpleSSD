@@ -546,6 +546,13 @@ void PageMapping::doGarbageCollection(std::vector<uint32_t> &blocksToReclaim,
         uint32_t newBlockIdx = freeBlock->first;
 
         for (uint32_t idx = 0; idx < bitsetSize; idx++) {
+          // mjo: Invalidate page only if the page is valid.
+		  // In other words, trimmed pages are skipped and you can same the time!
+		  //
+		  // If TRIM is not supported, then the following problem arises:
+		  //	Even though a file is deleted in an OS's view, SSDs don't know about the deletion.
+		  //	So SSDs have to copy the pages, corresponding to the deleted file, on every GC 
+		  //	until new write request with the same LBA is queued to the SSDs.
           if (bit.test(idx)) {
             // Invalidate
             block->second.invalidate(pageIndex, idx);
@@ -565,6 +572,7 @@ void PageMapping::doGarbageCollection(std::vector<uint32_t> &blocksToReclaim,
             mapping.first = newBlockIdx;
             mapping.second = newPageIdx;
 
+			// mjo: Copy data
             freeBlock->second.write(newPageIdx, lpns.at(idx), idx, beginAt);
 
             // Issue Write
