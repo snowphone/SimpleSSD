@@ -58,6 +58,8 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
 
   memset(&stat, 0, sizeof(stat));
 
+  // mjo: RandomTweak is only used when Superpaging is enabled.
+  // So, it's not my business :)
   bRandomTweak = conf.readBoolean(CONFIG_FTL, FTL_USE_RANDOM_IO_TWEAK);
   bitsetSize = bRandomTweak ? param.ioUnitInPage : 1;
 }
