@@ -28,7 +28,10 @@ PAL2::PAL2(PALStatistics *statistics, SimpleSSD::PAL::Parameter *p,
 
   uint32_t SPDIV =
       c->readUint(SimpleSSD::CONFIG_PAL, SimpleSSD::PAL::NAND_DMA_SPEED) / 50;
-  uint32_t PGDIV = 16384 / c->readUint(SimpleSSD::CONFIG_PAL,
+  // mjo: Found a bug!
+  // I dunno why they hard-coded the value 16384, but it prevents a page bigger than 16kB. 
+  // Thus, I changed to value to 64kB, I'm not sure any potential side effects though.
+  uint32_t PGDIV = 16384 * 4 / c->readUint(SimpleSSD::CONFIG_PAL,
                                        SimpleSSD::PAL::NAND_PAGE_SIZE);
 
   if (SPDIV == 0 || PGDIV == 0) {
