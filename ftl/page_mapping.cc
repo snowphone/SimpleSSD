@@ -22,9 +22,12 @@
 #include <algorithm>
 #include <limits>
 #include <random>
+#include <tuple>
 
 #include "util/algorithm.hh"
 #include "util/bitset.hh"
+#include "util/statistics.hh"
+#include "util/flatten.hh"
 
 namespace SimpleSSD {
 
@@ -972,6 +975,8 @@ void PageMapping::calculateTotalPages(uint64_t &valid, uint64_t &invalid) {
   }
 }
 
+static int K_for_k_mean = 5;
+
 void PageMapping::getStatList(std::vector<Stats> &list, std::string prefix) {
   Stats temp;
 
@@ -1016,34 +1021,11 @@ void PageMapping::getStatList(std::vector<Stats> &list, std::string prefix) {
   temp.desc = "Standard deviation of all pages' write counts";
   list.push_back(temp);
   // TODO: Clustering..?
-}
-
-double mean(const vector<vector<int>>& v) {
-	double ret = 0;
-	size_t length = 0;
-	for(auto& it: v) {
-		length += it.size();
-		for(auto& jt: it) {
-			ret += jt;
-		}
-	}
-	return ret / length;
-}
-
-double standard_deviation(const vector<vector<int>>& v) {
-	double m = mean(v);
-        double dev = 0;
-        size_t length = 0;
-
-	for(auto& it: v) {
-		length += it.size();
-		for(auto& jt: it) {
-                  dev += pow((m - jt), 2);
-                }
-	}
-        dev /= length;
-
-        return sqrt(dev);
+  for(int i = 0; i < K_for_k_mean; ++i) {
+	  temp.name = prefix + "page_mapping.cluster_" + to_string(i);
+	  temp.desc = "Clustered centroid at cluster " + to_string(i);
+	  list.push_back(temp);
+  }
 }
 
 void PageMapping::getStatValues(std::vector<double> &values) {
@@ -1060,6 +1042,14 @@ void PageMapping::getStatValues(std::vector<double> &values) {
   //}
   values.push_back(mean(write_cycle));
   values.push_back(standard_deviation(write_cycle));
+
+  vector<int> flat = flatten(write_cycle);
+
+  auto[clusters, centroids] = cluster(flat, K_for_k_mean);
+  (void) clusters; // unused
+  for(auto i : centroids){
+	  values.push_back(i);
+  }
 }
 
 void PageMapping::resetStatValues() {
