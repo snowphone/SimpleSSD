@@ -924,7 +924,11 @@ void PageMapping::eraseInternal(PAL::Request &req, uint64_t &tick) {
     // Insert block to free block list
     freeBlocks.emplace(iter, std::move(block->second));
     nFreeBlocks++;
+  } else {
+	  // Trace the number of dead blocks
+	  dead_blocks.insert(block->second.getBlockIndex());
   }
+
 
   // Remove block from block list
   blocks.erase(block);
@@ -975,7 +979,7 @@ void PageMapping::calculateTotalPages(uint64_t &valid, uint64_t &invalid) {
   }
 }
 
-static int K_for_k_mean = 5;
+static int K_for_k_mean = 12;
 
 void PageMapping::getStatList(std::vector<Stats> &list, std::string prefix) {
   Stats temp;
@@ -1020,12 +1024,14 @@ void PageMapping::getStatList(std::vector<Stats> &list, std::string prefix) {
   temp.name = prefix + "page_mapping.write-standard-deviation";
   temp.desc = "Standard deviation of all pages' write counts";
   list.push_back(temp);
-  // TODO: Clustering..?
   for(int i = 0; i < K_for_k_mean; ++i) {
 	  temp.name = prefix + "page_mapping.cluster_" + to_string(i);
 	  temp.desc = "Clustered centroid at cluster " + to_string(i);
 	  list.push_back(temp);
   }
+  temp.name = prefix + "page_mapping.dead_blocks";
+  temp.desc = "The number of blocks exceeding the erase threshold";
+  list.push_back(temp);
 }
 
 void PageMapping::getStatValues(std::vector<double> &values) {
@@ -1050,11 +1056,13 @@ void PageMapping::getStatValues(std::vector<double> &values) {
   for(auto i : centroids){
 	  values.push_back(i);
   }
+  values.push_back(dead_blocks.size());
 }
 
 void PageMapping::resetStatValues() {
   memset(&stat, 0, sizeof(stat));
   write_cycle.resize(param.totalPhysicalBlocks, vector<int>(param.pagesInBlock, 0));
+  dead_blocks.clear();
 }
 
 }  // namespace FTL

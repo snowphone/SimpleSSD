@@ -22,6 +22,7 @@
 
 #include <cinttypes>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "ftl/abstract_ftl.hh"
@@ -59,6 +60,7 @@ class PageMapping : public AbstractFTL {
     uint64_t validPageCopies;
   } stat;
   vector<vector<int>> write_cycle;
+  unordered_set<uint64_t> dead_blocks;
 
   float freeBlockRatio();
   uint32_t convertBlockIdx(uint32_t);
