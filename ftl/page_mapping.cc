@@ -696,7 +696,7 @@ void PageMapping::readInternal(Request &req, uint64_t &tick) {
 
 void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
   PAL::Request palRequest(req);	// mjo: Copy ioFlag. IOFlag means pages in a superpage
-  std::unordered_map<uint32_t, Block>::iterator block;
+  std::unordered_map<uint32_t, Block>::iterator blockIter;
   // mjo: table holds LPN -> PPN mappings
   auto mappingList = table.find(req.lpn);	// mjo: a vector of <block#, page# in a block>
   uint64_t beginAt;
@@ -714,10 +714,10 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
 
         if (mapping.first < param.totalPhysicalBlocks &&
             mapping.second < param.pagesInBlock) {
-          block = blocks.find(mapping.first);
+          blockIter = blocks.find(mapping.first);
 
           // Invalidate current page
-          block->second.invalidate(mapping.second, idx);
+          blockIter->second.invalidate(mapping.second, idx);
 
           // mjo: Since SSDs cannnot update data, 
           // we need to invalidate the previous data before overwrite them.
@@ -743,9 +743,11 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
 
   // Write data to free block
   // mjo: Get a free block from the free block list.
-  block = blocks.find(getLastFreeBlock(req.ioFlag)); // mjo: <ppn of the block, Block instance>
+  // mjo: Unordered_map.find returns an iterator which contains <key, value>
+  blockIter = blocks.find(getLastFreeBlock(req.ioFlag));  // mjo: <ppn of the block, Block instance>
+  Block& block = blockIter->second;
 
-  if (block == blocks.end()) {
+  if (blockIter == blocks.end()) {
     panic("No such block");
   }
 
@@ -769,12 +771,14 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
     // Do IO operation per page, not superpage!
     if (req.ioFlag.test(idx) || !bRandomTweak) {
       // mjo: Use empty page in the same block instead of get a page from another block.
-      uint32_t pageIndex = block->second.getNextWritePageIndex(idx);
+      uint32_t pageIndex = block.getNextWritePageIndex(idx);
       auto &mapping = mappingList->second.at(idx);
 
       beginAt = tick;
 
-      block->second.write(pageIndex, req.lpn, idx, beginAt);
+	  // mjo: idx corresponds to an index of a superpage, so we can just ignore it :)
+	  // In other words, only pageIndex matters
+      block.write(pageIndex, req.lpn, idx, beginAt);
 
       // Read old data if needed (Only executed when bRandomTweak = false)
       // Maybe some other init procedures want to perform 'partial-write'
@@ -791,11 +795,11 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
       }
 
       // update mapping to table
-      mapping.first = block->first;
+      mapping.first = blockIter->first;
       mapping.second = pageIndex;
 
       if (sendToPAL) {
-        palRequest.blockIndex = block->first;
+        palRequest.blockIndex = blockIter->first;
         palRequest.pageIndex = pageIndex;
 
         if (bRandomTweak) {
@@ -1015,7 +1019,6 @@ void PageMapping::getStatList(std::vector<Stats> &list, std::string prefix) {
   temp.name = prefix + "page_mapping.write-standard-deviation";
   temp.desc = "Standard deviation of all pages' write counts";
   list.push_back(temp);
-  // TODO: Clustering..?
 }
 
 double mean(const vector<vector<int>>& v) {

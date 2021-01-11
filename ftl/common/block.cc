@@ -32,6 +32,7 @@ Block::Block(uint32_t blockIdx, uint32_t count, uint32_t ioUnit)
       ioUnitInPage(ioUnit),
       pValidBits(nullptr),
       pErasedBits(nullptr),
+      pUnavailableBits(nullptr),
       pLPNs(nullptr),
       ppLPNs(nullptr),
       lastAccessed(0),
@@ -39,6 +40,7 @@ Block::Block(uint32_t blockIdx, uint32_t count, uint32_t ioUnit)
   if (ioUnitInPage == 1) {
     pValidBits = new Bitset(pageCount);
     pErasedBits = new Bitset(pageCount);
+    pUnavailableBits = new Bitset(pageCount);
 
     pLPNs = (uint64_t *)calloc(pageCount, sizeof(uint64_t));
   }
@@ -47,6 +49,7 @@ Block::Block(uint32_t blockIdx, uint32_t count, uint32_t ioUnit)
 
     validBits = std::vector<Bitset>(pageCount, copy);
     erasedBits = std::vector<Bitset>(pageCount, copy);
+    unavailableBits = std::vector<Bitset>(pageCount, copy);
 
     ppLPNs = (uint64_t **)calloc(pageCount, sizeof(uint64_t *));
 
@@ -70,12 +73,14 @@ Block::Block(const Block &old)
   if (ioUnitInPage == 1) {
     *pValidBits = *old.pValidBits;
     *pErasedBits = *old.pErasedBits;
+	*pUnavailableBits = *old.pUnavailableBits;
 
     memcpy(pLPNs, old.pLPNs, pageCount * sizeof(uint64_t));
   }
   else {
     validBits = old.validBits;
     erasedBits = old.erasedBits;
+	unavailableBits = old.unavailableBits;
 
     for (uint32_t i = 0; i < pageCount; i++) {
       memcpy(ppLPNs[i], old.ppLPNs[i], ioUnitInPage * sizeof(uint64_t));
@@ -95,9 +100,11 @@ Block::Block(Block &&old) noexcept
       pNextWritePageIndex(std::move(old.pNextWritePageIndex)),
       pValidBits(std::move(old.pValidBits)),
       pErasedBits(std::move(old.pErasedBits)),
+      pUnavailableBits(std::move(old.pUnavailableBits)),
       pLPNs(std::move(old.pLPNs)),
       validBits(std::move(old.validBits)),
       erasedBits(std::move(old.erasedBits)),
+	  unavailableBits(std::move(old.unavailableBits)),
       ppLPNs(std::move(old.ppLPNs)),
       lastAccessed(std::move(old.lastAccessed)),
       eraseCount(std::move(old.eraseCount)) {
@@ -108,6 +115,7 @@ Block::Block(Block &&old) noexcept
   old.pNextWritePageIndex = nullptr;
   old.pValidBits = nullptr;
   old.pErasedBits = nullptr;
+  old.pUnavailableBits = nullptr;
   old.pLPNs = nullptr;
   old.ppLPNs = nullptr;
   old.lastAccessed = 0;
@@ -120,6 +128,7 @@ Block::~Block() {
 
   delete pValidBits;
   delete pErasedBits;
+  delete pUnavailableBits;
 
   if (ppLPNs) {
     for (uint32_t i = 0; i < pageCount; i++) {
@@ -133,6 +142,7 @@ Block::~Block() {
   pLPNs = nullptr;
   pValidBits = nullptr;
   pErasedBits = nullptr;
+  pUnavailableBits = nullptr;
   ppLPNs = nullptr;
 }
 
@@ -155,9 +165,11 @@ Block &Block::operator=(Block &&rhs) {
     pNextWritePageIndex = std::move(rhs.pNextWritePageIndex);
     pValidBits = std::move(rhs.pValidBits);
     pErasedBits = std::move(rhs.pErasedBits);
+    pUnavailableBits = std::move(rhs.pUnavailableBits);
     pLPNs = std::move(rhs.pLPNs);
     validBits = std::move(rhs.validBits);
     erasedBits = std::move(rhs.erasedBits);
+	unavailableBits = std::move(rhs.unavailableBits);
     ppLPNs = std::move(rhs.ppLPNs);
     lastAccessed = std::move(rhs.lastAccessed);
     eraseCount = std::move(rhs.eraseCount);
@@ -165,6 +177,7 @@ Block &Block::operator=(Block &&rhs) {
     rhs.pNextWritePageIndex = nullptr;
     rhs.pValidBits = nullptr;
     rhs.pErasedBits = nullptr;
+	rhs.pUnavailableBits = nullptr;
     rhs.pLPNs = nullptr;
     rhs.ppLPNs = nullptr;
     rhs.lastAccessed = 0;
@@ -237,7 +250,20 @@ uint32_t Block::getDirtyPageCount() {
   return ret;
 }
 
+uint32_t Block::getUnavailablePageCount() {
+	if (ioUnitInPage == 1) {
+		return pUnavailableBits->count();
+	} else {
+		uint32_t ret = 0;
+		for(auto& bitset: unavailableBits) {
+			ret += bitset.count();
+		}
+		return ret;
+	}
+}
+
 uint32_t Block::getNextWritePageIndex() {
+  // mjo: Returns the smallest available page# among superpages
   uint32_t idx = 0;
 
   for (uint32_t i = 0; i < ioUnitInPage; i++) {
@@ -250,6 +276,7 @@ uint32_t Block::getNextWritePageIndex() {
 }
 
 uint32_t Block::getNextWritePageIndex(uint32_t idx) {
+  // mjo: pNextWritePageIndex 계산은 Block::write의 마지막 단계에서 수행됨
   return pNextWritePageIndex[idx];
 }
 
@@ -329,9 +356,22 @@ bool Block::write(uint32_t pageIndex, uint64_t lpn, uint32_t idx,
       validBits.at(pageIndex).set(idx);
 
       ppLPNs[pageIndex][idx] = lpn;
-    }
+	}
 
-    pNextWritePageIndex[idx] = pageIndex + 1;
+  // mjo: Find new available page whose "unavailable" is not set
+  auto isDead = [this, idx](uint32_t newPageIndex) {
+    if (ioUnitInPage == 1 && idx == 0) {
+      return pUnavailableBits->test(newPageIndex);
+    } else {
+      return unavailableBits.at(newPageIndex).test(idx);
+    }
+  };
+  
+  uint32_t newPageIndex = pageIndex;
+  do {
+    newPageIndex++;
+  } while(isDead(newPageIndex));
+  pNextWritePageIndex[idx] = newPageIndex;
   }
   else {
     panic("Write to non erased page");

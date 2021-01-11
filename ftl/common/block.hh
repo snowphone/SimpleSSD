@@ -40,12 +40,14 @@ class Block {
   // mjo: Each bit represents a page in a block
   Bitset *pValidBits;
   Bitset *pErasedBits;
+  Bitset *pUnavailableBits;
   uint64_t *pLPNs;
 
   // Following variables are used when ioUnitInPage > 1
   // mjo: Each element represents a superpage. Superpage is introduced to minimize a page-mapping table.
   std::vector<Bitset> validBits;
   std::vector<Bitset> erasedBits;
+  std::vector<Bitset> unavailableBits;
   uint64_t **ppLPNs;
 
   uint64_t lastAccessed;
@@ -66,6 +68,7 @@ class Block {
   uint32_t getValidPageCount();
   uint32_t getValidPageCountRaw();
   uint32_t getDirtyPageCount();
+  uint32_t getUnavailablePageCount();
   uint32_t getNextWritePageIndex();
   uint32_t getNextWritePageIndex(uint32_t);
   bool getPageInfo(uint32_t, std::vector<uint64_t> &, Bitset &);
