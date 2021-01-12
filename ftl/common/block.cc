@@ -26,8 +26,9 @@ namespace SimpleSSD {
 
 namespace FTL {
 
-Block::Block(uint32_t blockIdx, uint32_t count, uint32_t ioUnit)
-    : idx(blockIdx),
+Block::Block(uint32_t blockIdx, uint32_t count, uint32_t ioUnit, bool enableBadBlockSalvation)
+    : enableBadBlockSalvation(enableBadBlockSalvation),
+      idx(blockIdx),
       pageCount(count),
       ioUnitInPage(ioUnit),
       pValidBits(nullptr),
@@ -69,7 +70,7 @@ Block::Block(uint32_t blockIdx, uint32_t count, uint32_t ioUnit)
 }
 
 Block::Block(const Block &old)
-    : Block(old.idx, old.pageCount, old.ioUnitInPage) {
+    : Block(old.idx, old.pageCount, old.ioUnitInPage, old.enableBadBlockSalvation) {
   if (ioUnitInPage == 1) {
     *pValidBits = *old.pValidBits;
     *pErasedBits = *old.pErasedBits;
@@ -94,7 +95,8 @@ Block::Block(const Block &old)
 }
 
 Block::Block(Block &&old) noexcept
-    : idx(std::move(old.idx)),
+    : enableBadBlockSalvation(std::move(old.enableBadBlockSalvation)),
+      idx(std::move(old.idx)),
       pageCount(std::move(old.pageCount)),
       ioUnitInPage(std::move(old.ioUnitInPage)),
       pNextWritePageIndex(std::move(old.pNextWritePageIndex)),
@@ -159,6 +161,7 @@ Block &Block::operator=(Block &&rhs) {
   if (this != &rhs) {
     this->~Block();
 
+	enableBadBlockSalvation = std::move(rhs.enableBadBlockSalvation);
     idx = std::move(rhs.idx);
     pageCount = std::move(rhs.pageCount);
     ioUnitInPage = std::move(rhs.ioUnitInPage);
@@ -339,39 +342,43 @@ bool Block::write(uint32_t pageIndex, uint64_t lpn, uint32_t idx,
   }
 
   if (write) {
-    if (pageIndex < pNextWritePageIndex[idx]) {
-      panic("Write to block should sequential");
-    }
+	  if (pageIndex < pNextWritePageIndex[idx]) {
+		  panic("Write to block should sequential");
+	  }
 
-    lastAccessed = tick;
+	  lastAccessed = tick;
 
-    if (ioUnitInPage == 1) {
-      pErasedBits->reset(pageIndex);
-      pValidBits->set(pageIndex);
+	  if (ioUnitInPage == 1) {
+		  pErasedBits->reset(pageIndex);
+		  pValidBits->set(pageIndex);
 
-      pLPNs[pageIndex] = lpn;
-    }
-    else {
-      erasedBits.at(pageIndex).reset(idx);
-      validBits.at(pageIndex).set(idx);
+		  pLPNs[pageIndex] = lpn;
+	  }
+	  else {
+		  erasedBits.at(pageIndex).reset(idx);
+		  validBits.at(pageIndex).set(idx);
 
-      ppLPNs[pageIndex][idx] = lpn;
-	}
+		  ppLPNs[pageIndex][idx] = lpn;
+	  }
 
-  // mjo: Find new available page whose "unavailable" is not set
-  auto isDead = [this, idx](uint32_t newPageIndex) {
-    if (ioUnitInPage == 1 && idx == 0) {
-      return pUnavailableBits->test(newPageIndex);
-    } else {
-      return unavailableBits.at(newPageIndex).test(idx);
-    }
-  };
-  
-  uint32_t newPageIndex = pageIndex;
-  do {
-    newPageIndex++;
-  } while(isDead(newPageIndex));
-  pNextWritePageIndex[idx] = newPageIndex;
+	  // mjo: Find new available page whose "unavailable" is not set
+	  if (enableBadBlockSalvation) {
+		  auto isDead = [this, idx](uint32_t newPageIndex) {
+			  if (ioUnitInPage == 1 && idx == 0) {
+				  return pUnavailableBits->test(newPageIndex);
+			  } else {
+				  return unavailableBits.at(newPageIndex).test(idx);
+			  }
+		  };
+
+		  uint32_t newPageIndex = pageIndex;
+		  do {
+			  newPageIndex++;
+		  } while(isDead(newPageIndex));
+		  pNextWritePageIndex[idx] = newPageIndex;
+	  } else {
+		  pNextWritePageIndex[idx] = pageIndex + 1;
+	  }
   }
   else {
     panic("Write to non erased page");

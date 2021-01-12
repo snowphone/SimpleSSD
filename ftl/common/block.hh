@@ -31,6 +31,8 @@ namespace FTL {
 
 class Block {
  private:
+  bool enableBadBlockSalvation;
+
   uint32_t idx;
   uint32_t pageCount;
   uint32_t ioUnitInPage;
@@ -54,7 +56,7 @@ class Block {
   uint32_t eraseCount;
 
  public:
-  Block(uint32_t, uint32_t, uint32_t);
+  Block(uint32_t, uint32_t, uint32_t, bool);
   Block(const Block &);      // Copy constructor
   Block(Block &&) noexcept;  // Move constructor
   ~Block();

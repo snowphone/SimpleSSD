@@ -39,6 +39,8 @@ class PageMapping : public AbstractFTL {
 
   ConfigReader &conf;
 
+  bool enableBadBlockSalvation;
+
   // mjo: key - lpn, value - <block#, page# in a block>
   std::unordered_map<uint64_t, std::vector<std::pair<uint32_t, uint32_t>>>
       table;

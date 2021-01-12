@@ -43,7 +43,7 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
   write_cycle.resize(param.totalPhysicalBlocks, vector<int>(param.pagesInBlock));
 
   for (uint32_t i = 0; i < param.totalPhysicalBlocks; i++) {
-    freeBlocks.emplace_back(Block(i, param.pagesInBlock, param.ioUnitInPage));
+    freeBlocks.emplace_back(Block(i, param.pagesInBlock, param.ioUnitInPage, this->enableBadBlockSalvation));
   }
 
   nFreeBlocks = param.totalPhysicalBlocks;
@@ -63,6 +63,8 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
   // So, it's not my business :)
   bRandomTweak = conf.readBoolean(CONFIG_FTL, FTL_USE_RANDOM_IO_TWEAK);
   bitsetSize = bRandomTweak ? param.ioUnitInPage : 1;
+
+  enableBadBlockSalvation = conf.readBoolean(CONFIG_FTL, FTL_USE_BAD_BLOCK_SALVATION);
 }
 
 PageMapping::~PageMapping() {}

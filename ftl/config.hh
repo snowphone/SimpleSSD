@@ -41,6 +41,7 @@ typedef enum {
   FTL_GC_EVICT_POLICY,
   FTL_GC_D_CHOICE_PARAM,
   FTL_USE_RANDOM_IO_TWEAK,
+  FTL_USE_BAD_BLOCK_SALVATION,
 
   /* N+K Mapping configuration*/
   FTL_NKMAP_N,
@@ -84,6 +85,7 @@ class Config : public BaseConfig {
   EVICT_POLICY evictPolicy;    //!< Default: POLICY_GREEDY
   uint64_t dChoiceParam;       //!< Default: 3
   bool randomIOTweak;          //!< Default: true
+  bool enableBadBlockSalvation;
 
  public:
   Config();
