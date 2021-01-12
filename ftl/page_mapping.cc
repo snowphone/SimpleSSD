@@ -42,8 +42,11 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
   table.reserve(param.totalLogicalBlocks * param.pagesInBlock);
   write_cycle.resize(param.totalPhysicalBlocks, vector<int>(param.pagesInBlock));
 
+  enableBadBlockSalvation = conf.readBoolean(CONFIG_FTL, FTL_USE_BAD_BLOCK_SALVATION);
+  unavailablePageRatio = conf.readFloat(CONFIG_FTL, FTL_UNAVAILABLE_PAGE_RATIO);
+
   for (uint32_t i = 0; i < param.totalPhysicalBlocks; i++) {
-    freeBlocks.emplace_back(Block(i, param.pagesInBlock, param.ioUnitInPage, this->enableBadBlockSalvation));
+    freeBlocks.emplace_back(Block(i, param.pagesInBlock, param.ioUnitInPage, this->enableBadBlockSalvation, this->unavailablePageRatio));
   }
 
   nFreeBlocks = param.totalPhysicalBlocks;
@@ -63,8 +66,6 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
   // So, it's not my business :)
   bRandomTweak = conf.readBoolean(CONFIG_FTL, FTL_USE_RANDOM_IO_TWEAK);
   bitsetSize = bRandomTweak ? param.ioUnitInPage : 1;
-
-  enableBadBlockSalvation = conf.readBoolean(CONFIG_FTL, FTL_USE_BAD_BLOCK_SALVATION);
 }
 
 PageMapping::~PageMapping() {}
@@ -904,29 +905,40 @@ void PageMapping::eraseInternal(PAL::Request &req, uint64_t &tick) {
 
   // Check erase count
   uint32_t erasedCount = block->second.getEraseCount();
+  
+  auto blockIsAlive = [&block, this] {
+	  float unavailablePageRatio = block->second.getUnavailablePageRatio();
+	  if (enableBadBlockSalvation) {
+		  return unavailablePageRatio < this->unavailablePageRatio;
+	  } else {
+		  return unavailablePageRatio == 0;
+	  }
+  };
+  if (blockIsAlive()) {
+	  // Reverse search
+	  auto iter = freeBlocks.end();
 
-  if (erasedCount < threshold) {
-    // Reverse search
-    auto iter = freeBlocks.end();
+	  // mjo: TODO: Salvaged bad block의 수명은..?
+	  while (true) {
+		  iter--;
 
-    while (true) {
-      iter--;
+		  if (iter->getEraseCount() <= erasedCount) {
+			  // emplace: insert before pos
+			  iter++;
 
-      if (iter->getEraseCount() <= erasedCount) {
-        // emplace: insert before pos
-        iter++;
+			  break;
+		  }
 
-        break;
-      }
+		  if (iter == freeBlocks.begin()) {
+			  break;
+		  }
+	  }
 
-      if (iter == freeBlocks.begin()) {
-        break;
-      }
-    }
-
-    // Insert block to free block list
-    freeBlocks.emplace(iter, std::move(block->second));
-    nFreeBlocks++;
+	  // Insert block to free block list
+	  freeBlocks.emplace(iter, std::move(block->second));
+	  nFreeBlocks++;
+  } else {
+	  // Otherwise, treated as bad-block 
   }
 
   // Remove block from block list

@@ -32,6 +32,7 @@ namespace FTL {
 class Block {
  private:
   bool enableBadBlockSalvation;
+  float unavailablePageRatio;
 
   uint32_t idx;
   uint32_t pageCount;
@@ -56,7 +57,7 @@ class Block {
   uint32_t eraseCount;
 
  public:
-  Block(uint32_t, uint32_t, uint32_t, bool);
+  Block(uint32_t, uint32_t, uint32_t, bool, float);
   Block(const Block &);      // Copy constructor
   Block(Block &&) noexcept;  // Move constructor
   ~Block();
@@ -71,6 +72,7 @@ class Block {
   uint32_t getValidPageCountRaw();
   uint32_t getDirtyPageCount();
   uint32_t getUnavailablePageCount();
+  float getUnavailablePageRatio();
   uint32_t getNextWritePageIndex();
   uint32_t getNextWritePageIndex(uint32_t);
   bool getPageInfo(uint32_t, std::vector<uint64_t> &, Bitset &);

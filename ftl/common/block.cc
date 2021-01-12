@@ -26,8 +26,9 @@ namespace SimpleSSD {
 
 namespace FTL {
 
-Block::Block(uint32_t blockIdx, uint32_t count, uint32_t ioUnit, bool enableBadBlockSalvation)
+Block::Block(uint32_t blockIdx, uint32_t count, uint32_t ioUnit, bool enableBadBlockSalvation, float unavailablePageRatio)
     : enableBadBlockSalvation(enableBadBlockSalvation),
+      unavailablePageRatio(unavailablePageRatio),
       idx(blockIdx),
       pageCount(count),
       ioUnitInPage(ioUnit),
@@ -70,7 +71,7 @@ Block::Block(uint32_t blockIdx, uint32_t count, uint32_t ioUnit, bool enableBadB
 }
 
 Block::Block(const Block &old)
-    : Block(old.idx, old.pageCount, old.ioUnitInPage, old.enableBadBlockSalvation) {
+    : Block(old.idx, old.pageCount, old.ioUnitInPage, old.enableBadBlockSalvation, old.unavailablePageRatio) {
   if (ioUnitInPage == 1) {
     *pValidBits = *old.pValidBits;
     *pErasedBits = *old.pErasedBits;
@@ -96,6 +97,7 @@ Block::Block(const Block &old)
 
 Block::Block(Block &&old) noexcept
     : enableBadBlockSalvation(std::move(old.enableBadBlockSalvation)),
+      unavailablePageRatio(std::move(old.unavailablePageRatio)),
       idx(std::move(old.idx)),
       pageCount(std::move(old.pageCount)),
       ioUnitInPage(std::move(old.ioUnitInPage)),
@@ -162,6 +164,7 @@ Block &Block::operator=(Block &&rhs) {
     this->~Block();
 
 	enableBadBlockSalvation = std::move(rhs.enableBadBlockSalvation);
+    unavailablePageRatio = std::move(rhs.unavailablePageRatio);
     idx = std::move(rhs.idx);
     pageCount = std::move(rhs.pageCount);
     ioUnitInPage = std::move(rhs.ioUnitInPage);
@@ -263,6 +266,10 @@ uint32_t Block::getUnavailablePageCount() {
 		}
 		return ret;
 	}
+}
+
+float Block::getUnavailablePageRatio() {
+	return getUnavailablePageCount() / (float)pageCount;
 }
 
 uint32_t Block::getNextWritePageIndex() {
