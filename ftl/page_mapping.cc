@@ -40,13 +40,16 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
       bReclaimMore(false) {
   blocks.reserve(param.totalPhysicalBlocks);
   table.reserve(param.totalLogicalBlocks * param.pagesInBlock);
-  write_cycle.resize(param.totalPhysicalBlocks, vector<int>(param.pagesInBlock));
+  write_cycle.resize(param.totalPhysicalBlocks,
+                     vector<int>(param.pagesInBlock));
 
-  enableBadBlockSalvation = conf.readBoolean(CONFIG_FTL, FTL_USE_BAD_BLOCK_SALVATION);
-  unavailablePageRatio = conf.readFloat(CONFIG_FTL, FTL_UNAVAILABLE_PAGE_RATIO);
+  salvation.enabled = conf.readBoolean(CONFIG_FTL, FTL_USE_BAD_BLOCK_SALVATION);
+  salvation.unavailablePageRatio =
+      conf.readFloat(CONFIG_FTL, FTL_UNAVAILABLE_PAGE_RATIO);
 
   for (uint32_t i = 0; i < param.totalPhysicalBlocks; i++) {
-    freeBlocks.emplace_back(Block(i, param.pagesInBlock, param.ioUnitInPage, this->enableBadBlockSalvation, this->unavailablePageRatio));
+    freeBlocks.emplace_back(
+        Block(i, param.pagesInBlock, param.ioUnitInPage, salvation));
   }
 
   nFreeBlocks = param.totalPhysicalBlocks;
@@ -85,7 +88,7 @@ bool PageMapping::initialize() {
   debugprint(LOG_FTL_PAGE_MAPPING, "Initialization started");
 
   nTotalLogicalPages = param.totalLogicalBlocks * param.pagesInBlock;
-  //mjo: By modifying this field, you can accelerate the first GC
+  // mjo: By modifying this field, you can accelerate the first GC
   nPagesToWarmup =
       nTotalLogicalPages * conf.readFloat(CONFIG_FTL, FTL_FILL_RATIO);
   nPagesToInvalidate =
@@ -553,12 +556,14 @@ void PageMapping::doGarbageCollection(std::vector<uint32_t> &blocksToReclaim,
 
         for (uint32_t idx = 0; idx < bitsetSize; idx++) {
           // mjo: Invalidate page only if the page is valid.
-		  // In other words, trimmed pages are skipped and you can same the time!
-		  //
-		  // If TRIM is not supported, then the following problem arises:
-		  //	Even though a file is deleted in an OS's view, SSDs don't know about the deletion.
-		  //	So SSDs have to copy the pages, corresponding to the deleted file, on every GC 
-		  //	until new write request with the same LBA is queued to the SSDs.
+          // In other words, trimmed pages are skipped and you can same the
+          // time!
+          //
+          // If TRIM is not supported, then the following problem arises:
+          //	Even though a file is deleted in an OS's view, SSDs don't know
+          //about the deletion. 	So SSDs have to copy the pages, corresponding to
+          //the deleted file, on every GC 	until new write request with the same
+          //LBA is queued to the SSDs.
           if (bit.test(idx)) {
             // Invalidate
             block->second.invalidate(pageIndex, idx);
@@ -578,7 +583,7 @@ void PageMapping::doGarbageCollection(std::vector<uint32_t> &blocksToReclaim,
             mapping.first = newBlockIdx;
             mapping.second = newPageIdx;
 
-			// mjo: Copy data
+            // mjo: Copy data
             freeBlock->second.write(newPageIdx, lpns.at(idx), idx, beginAt);
 
             // Issue Write
@@ -667,7 +672,8 @@ void PageMapping::readInternal(Request &req, uint64_t &tick) {
           palRequest.pageIndex = mapping.second;
 
           // mjo: Random I/O tweak is used when superpage mode is enabled.
-          // The authors said it helps random write performance, I'm not sure what it is though.
+          // The authors said it helps random write performance, I'm not sure
+          // what it is though.
           if (bRandomTweak) {
             palRequest.ioFlag.reset();
             palRequest.ioFlag.set(idx);
@@ -698,10 +704,12 @@ void PageMapping::readInternal(Request &req, uint64_t &tick) {
 }
 
 void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
-  PAL::Request palRequest(req);	// mjo: Copy ioFlag. IOFlag means pages in a superpage
+  PAL::Request palRequest(
+      req);  // mjo: Copy ioFlag. IOFlag means pages in a superpage
   std::unordered_map<uint32_t, Block>::iterator blockIter;
   // mjo: table holds LPN -> PPN mappings
-  auto mappingList = table.find(req.lpn);	// mjo: a vector of <block#, page# in a block>
+  auto mappingList =
+      table.find(req.lpn);  // mjo: a vector of <block#, page# in a block>
   uint64_t beginAt;
   uint64_t finishedAt = tick;
   bool readBeforeWrite = false;
@@ -712,8 +720,9 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
     for (uint32_t idx = 0; idx < bitsetSize; idx++) {
       // Do IO operation per page, not superpage!
       if (req.ioFlag.test(idx) || !bRandomTweak) {
-        auto &mapping = mappingList->second.at(idx);	// mjo: <block#, page# in block>
-		write_cycle[mapping.first][mapping.second]++;
+        auto &mapping =
+            mappingList->second.at(idx);  // mjo: <block#, page# in block>
+        write_cycle[mapping.first][mapping.second]++;
 
         if (mapping.first < param.totalPhysicalBlocks &&
             mapping.second < param.pagesInBlock) {
@@ -722,7 +731,7 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
           // Invalidate current page
           blockIter->second.invalidate(mapping.second, idx);
 
-          // mjo: Since SSDs cannnot update data, 
+          // mjo: Since SSDs cannnot update data,
           // we need to invalidate the previous data before overwrite them.
         }
       }
@@ -747,8 +756,9 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
   // Write data to free block
   // mjo: Get a free block from the free block list.
   // mjo: Unordered_map.find returns an iterator which contains <key, value>
-  blockIter = blocks.find(getLastFreeBlock(req.ioFlag));  // mjo: <ppn of the block, Block instance>
-  Block& block = blockIter->second;
+  blockIter = blocks.find(
+      getLastFreeBlock(req.ioFlag));  // mjo: <ppn of the block, Block instance>
+  Block &block = blockIter->second;
 
   if (blockIter == blocks.end()) {
     panic("No such block");
@@ -773,14 +783,15 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
   for (uint32_t idx = 0; idx < bitsetSize; idx++) {
     // Do IO operation per page, not superpage!
     if (req.ioFlag.test(idx) || !bRandomTweak) {
-      // mjo: Use empty page in the same block instead of get a page from another block.
+      // mjo: Use empty page in the same block instead of get a page from
+      // another block.
       uint32_t pageIndex = block.getNextWritePageIndex(idx);
       auto &mapping = mappingList->second.at(idx);
 
       beginAt = tick;
 
-	  // mjo: idx corresponds to an index of a superpage, so we can just ignore it :)
-	  // In other words, only pageIndex matters
+      // mjo: idx corresponds to an index of a superpage, so we can just ignore
+      // it :) In other words, only pageIndex matters
       block.write(pageIndex, req.lpn, idx, beginAt);
 
       // Read old data if needed (Only executed when bRandomTweak = false)
@@ -885,8 +896,8 @@ void PageMapping::trimInternal(Request &req, uint64_t &tick) {
 }
 
 void PageMapping::eraseInternal(PAL::Request &req, uint64_t &tick) {
-  static uint64_t threshold =
-      conf.readUint(CONFIG_FTL, FTL_BAD_BLOCK_THRESHOLD);
+  // static uint64_t threshold =
+  //    conf.readUint(CONFIG_FTL, FTL_BAD_BLOCK_THRESHOLD);
   auto block = blocks.find(req.blockIndex);
 
   // Sanity checks
@@ -905,40 +916,42 @@ void PageMapping::eraseInternal(PAL::Request &req, uint64_t &tick) {
 
   // Check erase count
   uint32_t erasedCount = block->second.getEraseCount();
-  
+
   auto blockIsAlive = [&block, this] {
-	  float unavailablePageRatio = block->second.getUnavailablePageRatio();
-	  if (enableBadBlockSalvation) {
-		  return unavailablePageRatio < this->unavailablePageRatio;
-	  } else {
-		  return unavailablePageRatio == 0;
-	  }
+    float unavailablePageRatio = block->second.getUnavailablePageRatio();
+    if (salvation.enabled) {
+      return unavailablePageRatio < this->salvation.unavailablePageRatio;
+    }
+    else {
+      return unavailablePageRatio == 0;
+    }
   };
   if (blockIsAlive()) {
-	  // Reverse search
-	  auto iter = freeBlocks.end();
+    // Reverse search
+    auto iter = freeBlocks.end();
 
-	  // mjo: TODO: Salvaged bad block의 수명은..?
-	  while (true) {
-		  iter--;
+    // mjo: TODO: Salvaged bad block의 수명은..?
+    while (true) {
+      iter--;
 
-		  if (iter->getEraseCount() <= erasedCount) {
-			  // emplace: insert before pos
-			  iter++;
+      if (iter->getEraseCount() <= erasedCount) {
+        // emplace: insert before pos
+        iter++;
 
-			  break;
-		  }
+        break;
+      }
 
-		  if (iter == freeBlocks.begin()) {
-			  break;
-		  }
-	  }
+      if (iter == freeBlocks.begin()) {
+        break;
+      }
+    }
 
-	  // Insert block to free block list
-	  freeBlocks.emplace(iter, std::move(block->second));
-	  nFreeBlocks++;
-  } else {
-	  // Otherwise, treated as bad-block 
+    // Insert block to free block list
+    freeBlocks.emplace(iter, std::move(block->second));
+    nFreeBlocks++;
+  }
+  else {
+    // Otherwise, treated as bad-block
   }
 
   // Remove block from block list
@@ -1017,14 +1030,12 @@ void PageMapping::getStatList(std::vector<Stats> &list, std::string prefix) {
   temp.desc = "Wear-leveling factor";
   list.push_back(temp);
 
-  //for(uint64_t i = 0; i < write_cycle.size(); ++i) {
+  // for(uint64_t i = 0; i < write_cycle.size(); ++i) {
   //    for(uint64_t j = 0; j < write_cycle[i].size(); ++j) {
   //  	  char buf[1024];
-  //  	  snprintf(buf, 1024, "page_mapping.P/Ecycle.block%03lu.page%03lu", i, j);
-  //  	  temp.name = prefix + buf;
-  //  	  snprintf(buf, 1024, "Current P/E cycle at block %lu, page %lu", i, j);
-  //  	  temp.desc = buf;
-  //  	  list.push_back(temp);
+  //  	  snprintf(buf, 1024, "page_mapping.P/Ecycle.block%03lu.page%03lu", i,
+  //  j); 	  temp.name = prefix + buf; 	  snprintf(buf, 1024, "Current P/E cycle at
+  //  block %lu, page %lu", i, j); 	  temp.desc = buf; 	  list.push_back(temp);
   //    }
   //}
   temp.name = prefix + "page_mapping.write-mean";
@@ -1035,32 +1046,32 @@ void PageMapping::getStatList(std::vector<Stats> &list, std::string prefix) {
   list.push_back(temp);
 }
 
-double mean(const vector<vector<int>>& v) {
-	double ret = 0;
-	size_t length = 0;
-	for(auto& it: v) {
-		length += it.size();
-		for(auto& jt: it) {
-			ret += jt;
-		}
-	}
-	return ret / length;
+double mean(const vector<vector<int>> &v) {
+  double ret = 0;
+  size_t length = 0;
+  for (auto &it : v) {
+    length += it.size();
+    for (auto &jt : it) {
+      ret += jt;
+    }
+  }
+  return ret / length;
 }
 
-double standard_deviation(const vector<vector<int>>& v) {
-	double m = mean(v);
-        double dev = 0;
-        size_t length = 0;
+double standard_deviation(const vector<vector<int>> &v) {
+  double m = mean(v);
+  double dev = 0;
+  size_t length = 0;
 
-	for(auto& it: v) {
-		length += it.size();
-		for(auto& jt: it) {
-                  dev += pow((m - jt), 2);
-                }
-	}
-        dev /= length;
+  for (auto &it : v) {
+    length += it.size();
+    for (auto &jt : it) {
+      dev += pow((m - jt), 2);
+    }
+  }
+  dev /= length;
 
-        return sqrt(dev);
+  return sqrt(dev);
 }
 
 void PageMapping::getStatValues(std::vector<double> &values) {
@@ -1070,7 +1081,7 @@ void PageMapping::getStatValues(std::vector<double> &values) {
   values.push_back(stat.validPageCopies);
   values.push_back(calculateWearLeveling());
 
-  //for(uint64_t i = 0; i < write_cycle.size(); ++i) {
+  // for(uint64_t i = 0; i < write_cycle.size(); ++i) {
   //    for(uint64_t j = 0; j < write_cycle[i].size(); ++j) {
   //  	  values.push_back(write_cycle[i][j]);
   //    }
@@ -1081,7 +1092,8 @@ void PageMapping::getStatValues(std::vector<double> &values) {
 
 void PageMapping::resetStatValues() {
   memset(&stat, 0, sizeof(stat));
-  write_cycle.resize(param.totalPhysicalBlocks, vector<int>(param.pagesInBlock, 0));
+  write_cycle.resize(param.totalPhysicalBlocks,
+                     vector<int>(param.pagesInBlock, 0));
 }
 
 }  // namespace FTL

@@ -26,9 +26,9 @@ namespace SimpleSSD {
 
 namespace FTL {
 
-Block::Block(uint32_t blockIdx, uint32_t count, uint32_t ioUnit, bool enableBadBlockSalvation, float unavailablePageRatio)
-    : enableBadBlockSalvation(enableBadBlockSalvation),
-      unavailablePageRatio(unavailablePageRatio),
+Block::Block(uint32_t blockIdx, uint32_t count, uint32_t ioUnit,
+             Salvation salvation)
+    : salvation(salvation),
       idx(blockIdx),
       pageCount(count),
       ioUnitInPage(ioUnit),
@@ -71,18 +71,18 @@ Block::Block(uint32_t blockIdx, uint32_t count, uint32_t ioUnit, bool enableBadB
 }
 
 Block::Block(const Block &old)
-    : Block(old.idx, old.pageCount, old.ioUnitInPage, old.enableBadBlockSalvation, old.unavailablePageRatio) {
+    : Block(old.idx, old.pageCount, old.ioUnitInPage, old.salvation) {
   if (ioUnitInPage == 1) {
     *pValidBits = *old.pValidBits;
     *pErasedBits = *old.pErasedBits;
-	*pUnavailableBits = *old.pUnavailableBits;
+    *pUnavailableBits = *old.pUnavailableBits;
 
     memcpy(pLPNs, old.pLPNs, pageCount * sizeof(uint64_t));
   }
   else {
     validBits = old.validBits;
     erasedBits = old.erasedBits;
-	unavailableBits = old.unavailableBits;
+    unavailableBits = old.unavailableBits;
 
     for (uint32_t i = 0; i < pageCount; i++) {
       memcpy(ppLPNs[i], old.ppLPNs[i], ioUnitInPage * sizeof(uint64_t));
@@ -96,8 +96,7 @@ Block::Block(const Block &old)
 }
 
 Block::Block(Block &&old) noexcept
-    : enableBadBlockSalvation(std::move(old.enableBadBlockSalvation)),
-      unavailablePageRatio(std::move(old.unavailablePageRatio)),
+    : salvation(std::move(old.salvation)),
       idx(std::move(old.idx)),
       pageCount(std::move(old.pageCount)),
       ioUnitInPage(std::move(old.ioUnitInPage)),
@@ -108,7 +107,7 @@ Block::Block(Block &&old) noexcept
       pLPNs(std::move(old.pLPNs)),
       validBits(std::move(old.validBits)),
       erasedBits(std::move(old.erasedBits)),
-	  unavailableBits(std::move(old.unavailableBits)),
+      unavailableBits(std::move(old.unavailableBits)),
       ppLPNs(std::move(old.ppLPNs)),
       lastAccessed(std::move(old.lastAccessed)),
       eraseCount(std::move(old.eraseCount)) {
@@ -163,8 +162,7 @@ Block &Block::operator=(Block &&rhs) {
   if (this != &rhs) {
     this->~Block();
 
-	enableBadBlockSalvation = std::move(rhs.enableBadBlockSalvation);
-    unavailablePageRatio = std::move(rhs.unavailablePageRatio);
+    salvation = std::move(rhs.salvation);
     idx = std::move(rhs.idx);
     pageCount = std::move(rhs.pageCount);
     ioUnitInPage = std::move(rhs.ioUnitInPage);
@@ -175,7 +173,7 @@ Block &Block::operator=(Block &&rhs) {
     pLPNs = std::move(rhs.pLPNs);
     validBits = std::move(rhs.validBits);
     erasedBits = std::move(rhs.erasedBits);
-	unavailableBits = std::move(rhs.unavailableBits);
+    unavailableBits = std::move(rhs.unavailableBits);
     ppLPNs = std::move(rhs.ppLPNs);
     lastAccessed = std::move(rhs.lastAccessed);
     eraseCount = std::move(rhs.eraseCount);
@@ -183,7 +181,7 @@ Block &Block::operator=(Block &&rhs) {
     rhs.pNextWritePageIndex = nullptr;
     rhs.pValidBits = nullptr;
     rhs.pErasedBits = nullptr;
-	rhs.pUnavailableBits = nullptr;
+    rhs.pUnavailableBits = nullptr;
     rhs.pLPNs = nullptr;
     rhs.ppLPNs = nullptr;
     rhs.lastAccessed = 0;
@@ -257,19 +255,20 @@ uint32_t Block::getDirtyPageCount() {
 }
 
 uint32_t Block::getUnavailablePageCount() {
-	if (ioUnitInPage == 1) {
-		return pUnavailableBits->count();
-	} else {
-		uint32_t ret = 0;
-		for(auto& bitset: unavailableBits) {
-			ret += bitset.count();
-		}
-		return ret;
-	}
+  if (ioUnitInPage == 1) {
+    return pUnavailableBits->count();
+  }
+  else {
+    uint32_t ret = 0;
+    for (auto &bitset : unavailableBits) {
+      ret += bitset.count();
+    }
+    return ret;
+  }
 }
 
 float Block::getUnavailablePageRatio() {
-	return getUnavailablePageCount() / (float)pageCount;
+  return getUnavailablePageCount() / (float)pageCount;
 }
 
 uint32_t Block::getNextWritePageIndex() {
@@ -349,43 +348,45 @@ bool Block::write(uint32_t pageIndex, uint64_t lpn, uint32_t idx,
   }
 
   if (write) {
-	  if (pageIndex < pNextWritePageIndex[idx]) {
-		  panic("Write to block should sequential");
-	  }
+    if (pageIndex < pNextWritePageIndex[idx]) {
+      panic("Write to block should sequential");
+    }
 
-	  lastAccessed = tick;
+    lastAccessed = tick;
 
-	  if (ioUnitInPage == 1) {
-		  pErasedBits->reset(pageIndex);
-		  pValidBits->set(pageIndex);
+    if (ioUnitInPage == 1) {
+      pErasedBits->reset(pageIndex);
+      pValidBits->set(pageIndex);
 
-		  pLPNs[pageIndex] = lpn;
-	  }
-	  else {
-		  erasedBits.at(pageIndex).reset(idx);
-		  validBits.at(pageIndex).set(idx);
+      pLPNs[pageIndex] = lpn;
+    }
+    else {
+      erasedBits.at(pageIndex).reset(idx);
+      validBits.at(pageIndex).set(idx);
 
-		  ppLPNs[pageIndex][idx] = lpn;
-	  }
+      ppLPNs[pageIndex][idx] = lpn;
+    }
 
-	  // mjo: Find new available page whose "unavailable" is not set
-	  if (enableBadBlockSalvation) {
-		  auto isDead = [this, idx](uint32_t newPageIndex) {
-			  if (ioUnitInPage == 1 && idx == 0) {
-				  return pUnavailableBits->test(newPageIndex);
-			  } else {
-				  return unavailableBits.at(newPageIndex).test(idx);
-			  }
-		  };
+    // mjo: Find new available page whose "unavailable" is not set
+    if (salvation.enabled) {
+      auto isDead = [this, idx](uint32_t newPageIndex) {
+        if (ioUnitInPage == 1 && idx == 0) {
+          return pUnavailableBits->test(newPageIndex);
+        }
+        else {
+          return unavailableBits.at(newPageIndex).test(idx);
+        }
+      };
 
-		  uint32_t newPageIndex = pageIndex;
-		  do {
-			  newPageIndex++;
-		  } while(isDead(newPageIndex));
-		  pNextWritePageIndex[idx] = newPageIndex;
-	  } else {
-		  pNextWritePageIndex[idx] = pageIndex + 1;
-	  }
+      uint32_t newPageIndex = pageIndex;
+      do {
+        newPageIndex++;
+      } while (isDead(newPageIndex));
+      pNextWritePageIndex[idx] = newPageIndex;
+    }
+    else {
+      pNextWritePageIndex[idx] = pageIndex + 1;
+    }
   }
   else {
     panic("Write to non erased page");

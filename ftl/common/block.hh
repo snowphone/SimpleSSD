@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "util/bitset.hh"
+#include "ftl/block_salvation.hh"
 
 namespace SimpleSSD {
 
@@ -31,8 +32,7 @@ namespace FTL {
 
 class Block {
  private:
-  bool enableBadBlockSalvation;
-  float unavailablePageRatio;
+  Salvation salvation;
 
   uint32_t idx;
   uint32_t pageCount;
@@ -57,7 +57,7 @@ class Block {
   uint32_t eraseCount;
 
  public:
-  Block(uint32_t, uint32_t, uint32_t, bool, float);
+  Block(uint32_t, uint32_t, uint32_t, Salvation);
   Block(const Block &);      // Copy constructor
   Block(Block &&) noexcept;  // Move constructor
   ~Block();

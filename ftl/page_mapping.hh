@@ -28,6 +28,7 @@
 #include "ftl/common/block.hh"
 #include "ftl/ftl.hh"
 #include "pal/pal.hh"
+#include "ftl/block_salvation.hh"
 
 namespace SimpleSSD {
 
@@ -39,8 +40,8 @@ class PageMapping : public AbstractFTL {
 
   ConfigReader &conf;
 
-  bool enableBadBlockSalvation;
-  float unavailablePageRatio;
+  Salvation salvation;
+
 
   // mjo: key - lpn, value - <block#, page# in a block>
   std::unordered_map<uint64_t, std::vector<std::pair<uint32_t, uint32_t>>>
