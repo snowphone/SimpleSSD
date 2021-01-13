@@ -43,6 +43,7 @@ typedef enum {
   FTL_USE_RANDOM_IO_TWEAK,
   FTL_USE_BAD_BLOCK_SALVATION,
   FTL_UNAVAILABLE_PAGE_RATIO,
+  FTL_INITIAL_BAD_BLOCK_RATIO,
 
   /* N+K Mapping configuration*/
   FTL_NKMAP_N,
@@ -88,6 +89,7 @@ class Config : public BaseConfig {
   bool randomIOTweak;          //!< Default: true
   bool enableBadBlockSalvation;
   float unavailablePageRatio;
+  float initialBadBlockRatio;
 
  public:
   Config();

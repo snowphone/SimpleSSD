@@ -46,6 +46,8 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
   salvation.enabled = conf.readBoolean(CONFIG_FTL, FTL_USE_BAD_BLOCK_SALVATION);
   salvation.unavailablePageRatio =
       conf.readFloat(CONFIG_FTL, FTL_UNAVAILABLE_PAGE_RATIO);
+  salvation.initialBadBlockRatio =
+      conf.readFloat(CONFIG_FTL, FTL_INITIAL_BAD_BLOCK_RATIO);
 
   for (uint32_t i = 0; i < param.totalPhysicalBlocks; i++) {
     freeBlocks.emplace_back(
@@ -561,9 +563,9 @@ void PageMapping::doGarbageCollection(std::vector<uint32_t> &blocksToReclaim,
           //
           // If TRIM is not supported, then the following problem arises:
           //	Even though a file is deleted in an OS's view, SSDs don't know
-          //about the deletion. 	So SSDs have to copy the pages, corresponding to
-          //the deleted file, on every GC 	until new write request with the same
-          //LBA is queued to the SSDs.
+          // about the deletion. 	So SSDs have to copy the pages,
+          // corresponding to the deleted file, on every GC 	until new write
+          // request with the same LBA is queued to the SSDs.
           if (bit.test(idx)) {
             // Invalidate
             block->second.invalidate(pageIndex, idx);
@@ -1034,8 +1036,9 @@ void PageMapping::getStatList(std::vector<Stats> &list, std::string prefix) {
   //    for(uint64_t j = 0; j < write_cycle[i].size(); ++j) {
   //  	  char buf[1024];
   //  	  snprintf(buf, 1024, "page_mapping.P/Ecycle.block%03lu.page%03lu", i,
-  //  j); 	  temp.name = prefix + buf; 	  snprintf(buf, 1024, "Current P/E cycle at
-  //  block %lu, page %lu", i, j); 	  temp.desc = buf; 	  list.push_back(temp);
+  //  j); 	  temp.name = prefix + buf; 	  snprintf(buf, 1024, "Current P/E
+  //  cycle at block %lu, page %lu", i, j); 	  temp.desc = buf;
+  //  list.push_back(temp);
   //    }
   //}
   temp.name = prefix + "page_mapping.write-mean";

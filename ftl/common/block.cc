@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <random>
 
 namespace SimpleSSD {
 
@@ -61,6 +62,18 @@ Block::Block(uint32_t blockIdx, uint32_t count, uint32_t ioUnit,
   }
   else {
     panic("Invalid I/O unit in page");
+  }
+  if (salvation.enabled) {
+    auto gen = std::default_random_engine();
+    auto probability = std::uniform_real_distribution<double>();
+    if (probability(gen) < salvation.initialBadBlockRatio) {
+      auto pick = std::uniform_int_distribution<uint32_t>(0, pageCount);
+	  if(ioUnitInPage == 1)
+		  pUnavailableBits->set(pick(gen));
+	  else {
+		  unavailableBits.at(pick(gen)).set(0);
+	  }
+    }
   }
 
   // C-style allocation

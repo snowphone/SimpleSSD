@@ -40,6 +40,7 @@ const char NAME_GC_D_CHOICE_PARAM[] = "DChoiceParam";
 const char NAME_USE_RANDOM_IO_TWEAK[] = "EnableRandomIOTweak";
 const char NAME_USE_BAD_BLOCK_SALVATION[] = "EnableBadBlockSalvation";
 const char NAME_UNAVAILABLE_PAGE_RATIO[] = "UnavailablePageRatio";
+const char NAME_INITIAL_BAD_BLOCK_RATIO[] = "InitialBadBlockRatio";
 
 Config::Config() {
   mapping = PAGE_MAPPING;
@@ -57,6 +58,7 @@ Config::Config() {
   randomIOTweak = true;
   enableBadBlockSalvation = false;
   unavailablePageRatio = 0.00001;
+  initialBadBlockRatio = 0;
 }
 
 bool Config::setConfig(const char *name, const char *value) {
@@ -104,6 +106,8 @@ bool Config::setConfig(const char *name, const char *value) {
 	  enableBadBlockSalvation = convertBool(value);
   } else if (MATCH_NAME(NAME_UNAVAILABLE_PAGE_RATIO)) {
 	  unavailablePageRatio = strtof(value, nullptr);
+  } else if (MATCH_NAME(NAME_INITIAL_BAD_BLOCK_RATIO)) {
+	  initialBadBlockRatio = strtof(value, nullptr);
   } else {
     ret = false;
   }
@@ -190,6 +194,8 @@ float Config::readFloat(uint32_t idx) {
 	case FTL_UNAVAILABLE_PAGE_RATIO:
 	  ret = unavailablePageRatio;
 	  break;
+	case FTL_INITIAL_BAD_BLOCK_RATIO:
+	  ret = initialBadBlockRatio;
   }
 
   return ret;
