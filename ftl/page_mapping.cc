@@ -40,8 +40,6 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
       bReclaimMore(false) {
   blocks.reserve(param.totalPhysicalBlocks);
   table.reserve(param.totalLogicalBlocks * param.pagesInBlock);
-  write_cycle.resize(param.totalPhysicalBlocks,
-                     vector<int>(param.pagesInBlock));
 
   salvation.enabled = conf.readBoolean(CONFIG_FTL, FTL_USE_BAD_BLOCK_SALVATION);
   salvation.unavailablePageRatio =
@@ -51,7 +49,8 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
 
   debugprint(LOG_FTL_PAGE_MAPPING, "Bad-block salvation %s",
              salvation.enabled ? "enabled" : "disabled");
-  debugprint(LOG_FTL_PAGE_MAPPING, "Initial bad block ratio: %f", salvation.initialBadBlockRatio);
+  debugprint(LOG_FTL_PAGE_MAPPING, "Initial bad block ratio: %f",
+             salvation.initialBadBlockRatio);
 
   for (uint32_t i = 0; i < param.totalPhysicalBlocks; i++) {
     if (salvation.enabled) {
@@ -743,7 +742,6 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
       if (req.ioFlag.test(idx) || !bRandomTweak) {
         auto &mapping =
             mappingList->second.at(idx);  // mjo: <block#, page# in block>
-        write_cycle[mapping.first][mapping.second]++;
 
         if (mapping.first < param.totalPhysicalBlocks &&
             mapping.second < param.pagesInBlock) {
@@ -1050,50 +1048,6 @@ void PageMapping::getStatList(std::vector<Stats> &list, std::string prefix) {
   temp.name = prefix + "page_mapping.wear_leveling";
   temp.desc = "Wear-leveling factor";
   list.push_back(temp);
-
-  // for(uint64_t i = 0; i < write_cycle.size(); ++i) {
-  //    for(uint64_t j = 0; j < write_cycle[i].size(); ++j) {
-  //  	  char buf[1024];
-  //  	  snprintf(buf, 1024, "page_mapping.P/Ecycle.block%03lu.page%03lu", i,
-  //  j); 	  temp.name = prefix + buf; 	  snprintf(buf, 1024, "Current
-  //  P/E cycle at block %lu, page %lu", i, j); 	  temp.desc = buf;
-  //  list.push_back(temp);
-  //    }
-  //}
-  temp.name = prefix + "page_mapping.write-mean";
-  temp.desc = "Mean of all pages' write counts";
-  list.push_back(temp);
-  temp.name = prefix + "page_mapping.write-standard-deviation";
-  temp.desc = "Standard deviation of all pages' write counts";
-  list.push_back(temp);
-}
-
-double mean(const vector<vector<int>> &v) {
-  double ret = 0;
-  size_t length = 0;
-  for (auto &it : v) {
-    length += it.size();
-    for (auto &jt : it) {
-      ret += jt;
-    }
-  }
-  return ret / length;
-}
-
-double standard_deviation(const vector<vector<int>> &v) {
-  double m = mean(v);
-  double dev = 0;
-  size_t length = 0;
-
-  for (auto &it : v) {
-    length += it.size();
-    for (auto &jt : it) {
-      dev += pow((m - jt), 2);
-    }
-  }
-  dev /= length;
-
-  return sqrt(dev);
 }
 
 void PageMapping::getStatValues(std::vector<double> &values) {
@@ -1102,20 +1056,10 @@ void PageMapping::getStatValues(std::vector<double> &values) {
   values.push_back(stat.validSuperPageCopies);
   values.push_back(stat.validPageCopies);
   values.push_back(calculateWearLeveling());
-
-  // for(uint64_t i = 0; i < write_cycle.size(); ++i) {
-  //    for(uint64_t j = 0; j < write_cycle[i].size(); ++j) {
-  //  	  values.push_back(write_cycle[i][j]);
-  //    }
-  //}
-  values.push_back(mean(write_cycle));
-  values.push_back(standard_deviation(write_cycle));
 }
 
 void PageMapping::resetStatValues() {
   memset(&stat, 0, sizeof(stat));
-  write_cycle.resize(param.totalPhysicalBlocks,
-                     vector<int>(param.pagesInBlock, 0));
 }
 
 }  // namespace FTL

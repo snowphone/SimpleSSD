@@ -63,7 +63,6 @@ class PageMapping : public AbstractFTL {
     uint64_t validSuperPageCopies;
     uint64_t validPageCopies;
   } stat;
-  vector<vector<int>> write_cycle;
 
   float freeBlockRatio();
   uint32_t convertBlockIdx(uint32_t);
