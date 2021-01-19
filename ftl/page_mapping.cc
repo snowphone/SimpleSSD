@@ -49,12 +49,27 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
   salvation.initialBadBlockRatio =
       conf.readFloat(CONFIG_FTL, FTL_INITIAL_BAD_BLOCK_RATIO);
 
+  debugprint(LOG_FTL_PAGE_MAPPING, "Bad-block salvation %s",
+             salvation.enabled ? "enabled" : "disabled");
+  debugprint(LOG_FTL_PAGE_MAPPING, "Initial bad block ratio: %f", salvation.initialBadBlockRatio);
+
   for (uint32_t i = 0; i < param.totalPhysicalBlocks; i++) {
-    freeBlocks.emplace_back(
-        Block(i, param.pagesInBlock, param.ioUnitInPage, salvation));
+    if (salvation.enabled) {
+      freeBlocks.emplace_back(
+          Block(i, param.pagesInBlock, param.ioUnitInPage, salvation));
+    }
+    else {
+      if (probability() >= salvation.initialBadBlockRatio) {
+        freeBlocks.emplace_back(
+            Block(i, param.pagesInBlock, param.ioUnitInPage, salvation));
+      }
+    }
   }
 
-  nFreeBlocks = param.totalPhysicalBlocks;
+  nFreeBlocks = freeBlocks.size();
+  debugprint(LOG_FTL_PAGE_MAPPING,
+             "Logical free blocks: %lu, actual free blocks: %lu",
+             param.totalPhysicalBlocks, nFreeBlocks);
 
   status.totalLogicalPages = param.totalLogicalBlocks * param.pagesInBlock;
 
@@ -517,7 +532,7 @@ void PageMapping::doGarbageCollection(std::vector<uint32_t> &blocksToReclaim,
   std::vector<PAL::Request> eraseRequests;
   std::vector<uint64_t> lpns;
   Bitset bit(param.ioUnitInPage);
-  uint64_t beginAt;
+  uint64_t beginAt = 0;
   uint64_t readFinishedAt = tick;
   uint64_t writeFinishedAt = tick;
   uint64_t eraseFinishedAt = tick;
@@ -543,8 +558,11 @@ void PageMapping::doGarbageCollection(std::vector<uint32_t> &blocksToReclaim,
           bit.set();
         }
 
+        // mjo: Thanks to the implementation, I don't have to struggle with
+        // modifying fetching free blocks since for every page to reclaim it
+        // fetches a free block.
         // Retrive free block
-        auto freeBlock = blocks.find(getLastFreeBlock(bit));
+        auto freeBlockIter = blocks.find(getLastFreeBlock(bit));
 
         // Issue Read
         req.blockIndex = block->first;
@@ -554,11 +572,11 @@ void PageMapping::doGarbageCollection(std::vector<uint32_t> &blocksToReclaim,
         readRequests.push_back(req);
 
         // Update mapping table
-        uint32_t newBlockIdx = freeBlock->first;
+        uint32_t newBlockIdx = freeBlockIter->first;
 
         for (uint32_t idx = 0; idx < bitsetSize; idx++) {
           // mjo: Invalidate page only if the page is valid.
-          // In other words, trimmed pages are skipped and you can same the
+          // In other words, trimmed pages are skipped and you can save the
           // time!
           //
           // If TRIM is not supported, then the following problem arises:
@@ -580,13 +598,14 @@ void PageMapping::doGarbageCollection(std::vector<uint32_t> &blocksToReclaim,
 
             auto &mapping = mappingList->second.at(idx);
 
-            uint32_t newPageIdx = freeBlock->second.getNextWritePageIndex(idx);
+            uint32_t newPageIdx =
+                freeBlockIter->second.getNextWritePageIndex(idx);
 
             mapping.first = newBlockIdx;
             mapping.second = newPageIdx;
 
             // mjo: Copy data
-            freeBlock->second.write(newPageIdx, lpns.at(idx), idx, beginAt);
+            freeBlockIter->second.write(newPageIdx, lpns.at(idx), idx, beginAt);
 
             // Issue Write
             req.blockIndex = newBlockIdx;
@@ -1036,8 +1055,8 @@ void PageMapping::getStatList(std::vector<Stats> &list, std::string prefix) {
   //    for(uint64_t j = 0; j < write_cycle[i].size(); ++j) {
   //  	  char buf[1024];
   //  	  snprintf(buf, 1024, "page_mapping.P/Ecycle.block%03lu.page%03lu", i,
-  //  j); 	  temp.name = prefix + buf; 	  snprintf(buf, 1024, "Current P/E
-  //  cycle at block %lu, page %lu", i, j); 	  temp.desc = buf;
+  //  j); 	  temp.name = prefix + buf; 	  snprintf(buf, 1024, "Current
+  //  P/E cycle at block %lu, page %lu", i, j); 	  temp.desc = buf;
   //  list.push_back(temp);
   //    }
   //}

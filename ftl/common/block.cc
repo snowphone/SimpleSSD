@@ -64,14 +64,11 @@ Block::Block(uint32_t blockIdx, uint32_t count, uint32_t ioUnit,
     panic("Invalid I/O unit in page");
   }
   if (salvation.enabled) {
-    auto gen = std::default_random_engine();
-    auto probability = std::uniform_real_distribution<double>();
-    if (probability(gen) < salvation.initialBadBlockRatio) {
-      auto pick = std::uniform_int_distribution<uint32_t>(0, pageCount);
+    if (probability() < salvation.initialBadBlockRatio) {
 	  if(ioUnitInPage == 1)
-		  pUnavailableBits->set(pick(gen));
+		  pUnavailableBits->set(pick(0, pageCount - 1));
 	  else {
-		  unavailableBits.at(pick(gen)).set(0);
+		  unavailableBits.at(pick(0, pageCount - 1)).set(0);
 	  }
     }
   }
