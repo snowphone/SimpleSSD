@@ -47,11 +47,15 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
       conf.readFloat(CONFIG_FTL, FTL_UNAVAILABLE_PAGE_THRESHOLD);
   salvationConfig.initialBadBlockRatio =
       conf.readFloat(CONFIG_FTL, FTL_INITIAL_BAD_BLOCK_RATIO);
+  salvationConfig.initialBadPageRatio =
+      conf.readFloat(CONFIG_FTL, FTL_INITIAL_BAD_PAGE_RATIO);
 
   debugprint(LOG_FTL_PAGE_MAPPING, "Bad-block salvation %s",
              salvationConfig.enabled ? "enabled" : "disabled");
   debugprint(LOG_FTL_PAGE_MAPPING, "Initial bad block ratio: %f",
              salvationConfig.initialBadBlockRatio);
+  debugprint(LOG_FTL_PAGE_MAPPING, "Initial bad page ratio: %f",
+             salvationConfig.initialBadPageRatio);
 
   for (uint32_t i = 0; i < param.totalPhysicalBlocks; i++) {
     if (salvationConfig.enabled) {
