@@ -41,26 +41,27 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
   blocks.reserve(param.totalPhysicalBlocks);
   table.reserve(param.totalLogicalBlocks * param.pagesInBlock);
 
-  salvation.enabled = conf.readBoolean(CONFIG_FTL, FTL_USE_BAD_BLOCK_SALVATION);
-  salvation.unavailablePageRatio =
-      conf.readFloat(CONFIG_FTL, FTL_UNAVAILABLE_PAGE_RATIO);
-  salvation.initialBadBlockRatio =
+  salvationConfig.enabled =
+      conf.readBoolean(CONFIG_FTL, FTL_USE_BAD_BLOCK_SALVATION);
+  salvationConfig.unavailablePageThreshold =
+      conf.readFloat(CONFIG_FTL, FTL_UNAVAILABLE_PAGE_THRESHOLD);
+  salvationConfig.initialBadBlockRatio =
       conf.readFloat(CONFIG_FTL, FTL_INITIAL_BAD_BLOCK_RATIO);
 
   debugprint(LOG_FTL_PAGE_MAPPING, "Bad-block salvation %s",
-             salvation.enabled ? "enabled" : "disabled");
+             salvationConfig.enabled ? "enabled" : "disabled");
   debugprint(LOG_FTL_PAGE_MAPPING, "Initial bad block ratio: %f",
-             salvation.initialBadBlockRatio);
+             salvationConfig.initialBadBlockRatio);
 
   for (uint32_t i = 0; i < param.totalPhysicalBlocks; i++) {
-    if (salvation.enabled) {
+    if (salvationConfig.enabled) {
       freeBlocks.emplace_back(
-          Block(i, param.pagesInBlock, param.ioUnitInPage, salvation));
+          Block(i, param.pagesInBlock, param.ioUnitInPage, salvationConfig));
     }
     else {
-      if (probability() >= salvation.initialBadBlockRatio) {
+      if (probability() >= salvationConfig.initialBadBlockRatio) {
         freeBlocks.emplace_back(
-            Block(i, param.pagesInBlock, param.ioUnitInPage, salvation));
+            Block(i, param.pagesInBlock, param.ioUnitInPage, salvationConfig));
       }
     }
   }
@@ -938,8 +939,9 @@ void PageMapping::eraseInternal(PAL::Request &req, uint64_t &tick) {
 
   auto blockIsAlive = [&block, this] {
     float unavailablePageRatio = block->second.getUnavailablePageRatio();
-    if (salvation.enabled) {
-      return unavailablePageRatio < this->salvation.unavailablePageRatio;
+    if (salvationConfig.enabled) {
+      return unavailablePageRatio <
+             this->salvationConfig.unavailablePageThreshold;
     }
     else {
       return unavailablePageRatio == 0;

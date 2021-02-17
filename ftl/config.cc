@@ -39,7 +39,7 @@ const char NAME_GC_EVICT_POLICY[] = "EvictPolicy";
 const char NAME_GC_D_CHOICE_PARAM[] = "DChoiceParam";
 const char NAME_USE_RANDOM_IO_TWEAK[] = "EnableRandomIOTweak";
 const char NAME_USE_BAD_BLOCK_SALVATION[] = "EnableBadBlockSalvation";
-const char NAME_UNAVAILABLE_PAGE_RATIO[] = "UnavailablePageRatio";
+const char NAME_UNAVAILABLE_PAGE_THRESHOLD[] = "UnavailablePageThreshold";
 const char NAME_INITIAL_BAD_BLOCK_RATIO[] = "InitialBadBlockRatio";
 
 Config::Config() {
@@ -57,7 +57,7 @@ Config::Config() {
   dChoiceParam = 3;
   randomIOTweak = true;
   enableBadBlockSalvation = false;
-  unavailablePageRatio = 0.00001;
+  unavailablePageThreshold = 0.00001;
   initialBadBlockRatio = 0;
 }
 
@@ -104,11 +104,14 @@ bool Config::setConfig(const char *name, const char *value) {
     randomIOTweak = convertBool(value);
   } else if (MATCH_NAME(NAME_USE_BAD_BLOCK_SALVATION)) {
 	  enableBadBlockSalvation = convertBool(value);
-  } else if (MATCH_NAME(NAME_UNAVAILABLE_PAGE_RATIO)) {
-	  unavailablePageRatio = strtof(value, nullptr);
-  } else if (MATCH_NAME(NAME_INITIAL_BAD_BLOCK_RATIO)) {
-	  initialBadBlockRatio = strtof(value, nullptr);
-  } else {
+  }
+  else if (MATCH_NAME(NAME_UNAVAILABLE_PAGE_THRESHOLD)) {
+    unavailablePageThreshold = strtof(value, nullptr);
+  }
+  else if (MATCH_NAME(NAME_INITIAL_BAD_BLOCK_RATIO)) {
+    initialBadBlockRatio = strtof(value, nullptr);
+  }
+  else {
     ret = false;
   }
 
@@ -191,11 +194,11 @@ float Config::readFloat(uint32_t idx) {
     case FTL_GC_RECLAIM_THRESHOLD:
       ret = reclaimThreshold;
       break;
-	case FTL_UNAVAILABLE_PAGE_RATIO:
-	  ret = unavailablePageRatio;
-	  break;
-	case FTL_INITIAL_BAD_BLOCK_RATIO:
-	  ret = initialBadBlockRatio;
+    case FTL_UNAVAILABLE_PAGE_THRESHOLD:
+      ret = unavailablePageThreshold;
+      break;
+    case FTL_INITIAL_BAD_BLOCK_RATIO:
+      ret = initialBadBlockRatio;
   }
 
   return ret;

@@ -42,7 +42,7 @@ typedef enum {
   FTL_GC_D_CHOICE_PARAM,
   FTL_USE_RANDOM_IO_TWEAK,
   FTL_USE_BAD_BLOCK_SALVATION,
-  FTL_UNAVAILABLE_PAGE_RATIO,
+  FTL_UNAVAILABLE_PAGE_THRESHOLD,
   FTL_INITIAL_BAD_BLOCK_RATIO,
 
   /* N+K Mapping configuration*/
@@ -88,7 +88,7 @@ class Config : public BaseConfig {
   uint64_t dChoiceParam;       //!< Default: 3
   bool randomIOTweak;          //!< Default: true
   bool enableBadBlockSalvation;
-  float unavailablePageRatio;
+  float unavailablePageThreshold;
   float initialBadBlockRatio;
 
  public:

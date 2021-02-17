@@ -8,7 +8,7 @@ namespace FTL {
 
 struct Salvation {
   bool enabled;
-  float unavailablePageRatio;
+  float unavailablePageThreshold;
   float initialBadBlockRatio;
 };
 
