@@ -19,6 +19,8 @@
 
 #include "ftl/common/block.hh"
 
+#include <bits/stdint-uintn.h>
+
 #include <algorithm>
 #include <cstring>
 #include <random>
@@ -397,7 +399,7 @@ bool Block::write(uint32_t pageIndex, uint64_t lpn, uint32_t idx,
       uint32_t newPageIndex = pageIndex;
       do {
         newPageIndex++;
-      } while (isDead(newPageIndex));
+      } while (newPageIndex < this->pageCount && isDead(newPageIndex));
       pNextWritePageIndex[idx] = newPageIndex;
     }
     else {
@@ -426,6 +428,24 @@ void Block::erase() {
   }
 
   memset(pNextWritePageIndex, 0, sizeof(uint32_t) * ioUnitInPage);
+
+  if (salvation.enabled) {
+    for (uint32_t idx = 0; idx < ioUnitInPage; ++idx) {
+      auto isDead = [this, idx](uint32_t newPageIndex) {
+        if (ioUnitInPage == 1 && idx == 0) {
+          return pUnavailableBits->test(newPageIndex);
+        }
+        else {
+          return unavailableBits.at(newPageIndex).test(idx);
+        }
+      };
+
+      while (pNextWritePageIndex[idx] < this->pageCount &&
+             isDead(pNextWritePageIndex[idx])) {
+        pNextWritePageIndex[idx]++;
+      }
+    }
+  }
 
   eraseCount++;
 }
