@@ -19,25 +19,25 @@
 
 #include "ftl/common/block.hh"
 
-#include <bits/stdint-uintn.h>
-
 #include <algorithm>
 #include <cstring>
+#include <numeric>
 #include <random>
+#include <tuple>
+#include <utility>
 
 namespace SimpleSSD {
 
 namespace FTL {
 
 Block::Block(uint32_t blockIdx, uint32_t count, uint32_t ioUnit,
-             Salvation salvation)
-    : salvation(salvation),
+             Salvation &salvation)
+    : salvation(&salvation),
       idx(blockIdx),
       pageCount(count),
       ioUnitInPage(ioUnit),
       pValidBits(nullptr),
       pErasedBits(nullptr),
-      pUnavailableBits(nullptr),
       pLPNs(nullptr),
       ppLPNs(nullptr),
       lastAccessed(0),
@@ -45,7 +45,6 @@ Block::Block(uint32_t blockIdx, uint32_t count, uint32_t ioUnit,
   if (ioUnitInPage == 1) {
     pValidBits = new Bitset(pageCount);
     pErasedBits = new Bitset(pageCount);
-    pUnavailableBits = new Bitset(pageCount);
 
     pLPNs = (uint64_t *)calloc(pageCount, sizeof(uint64_t));
   }
@@ -54,7 +53,6 @@ Block::Block(uint32_t blockIdx, uint32_t count, uint32_t ioUnit,
 
     validBits = std::vector<Bitset>(pageCount, copy);
     erasedBits = std::vector<Bitset>(pageCount, copy);
-    unavailableBits = std::vector<Bitset>(pageCount, copy);
 
     ppLPNs = (uint64_t **)calloc(pageCount, sizeof(uint64_t *));
 
@@ -66,18 +64,9 @@ Block::Block(uint32_t blockIdx, uint32_t count, uint32_t ioUnit,
     panic("Invalid I/O unit in page");
   }
 
-  if (salvation.enabled) {
-    if (probability() < salvation.initialBadBlockRatio) {
-      std::vector<uint64_t> indexList =
-          sample(0, pageCount - 1, pageCount * salvation.initialBadPageRatio);
-      for (auto i : indexList) {
-        if (ioUnitInPage == 1) {
-          pUnavailableBits->set(i);
-        }
-        else {
-          unavailableBits.at(i).set(0);
-        }
-      }
+  for (uint64_t i = 0; i < pageCount; ++i) {
+    if (probability(salvation.per)) {
+      salvation.badPageTable.insert(blockIdx, i);
     }
   }
 
@@ -89,18 +78,16 @@ Block::Block(uint32_t blockIdx, uint32_t count, uint32_t ioUnit,
 }
 
 Block::Block(const Block &old)
-    : Block(old.idx, old.pageCount, old.ioUnitInPage, old.salvation) {
+    : Block(old.idx, old.pageCount, old.ioUnitInPage, *old.salvation) {
   if (ioUnitInPage == 1) {
     *pValidBits = *old.pValidBits;
     *pErasedBits = *old.pErasedBits;
-    *pUnavailableBits = *old.pUnavailableBits;
 
     memcpy(pLPNs, old.pLPNs, pageCount * sizeof(uint64_t));
   }
   else {
     validBits = old.validBits;
     erasedBits = old.erasedBits;
-    unavailableBits = old.unavailableBits;
 
     for (uint32_t i = 0; i < pageCount; i++) {
       memcpy(ppLPNs[i], old.ppLPNs[i], ioUnitInPage * sizeof(uint64_t));
@@ -121,11 +108,9 @@ Block::Block(Block &&old) noexcept
       pNextWritePageIndex(std::move(old.pNextWritePageIndex)),
       pValidBits(std::move(old.pValidBits)),
       pErasedBits(std::move(old.pErasedBits)),
-      pUnavailableBits(std::move(old.pUnavailableBits)),
       pLPNs(std::move(old.pLPNs)),
       validBits(std::move(old.validBits)),
       erasedBits(std::move(old.erasedBits)),
-      unavailableBits(std::move(old.unavailableBits)),
       ppLPNs(std::move(old.ppLPNs)),
       lastAccessed(std::move(old.lastAccessed)),
       eraseCount(std::move(old.eraseCount)) {
@@ -136,7 +121,6 @@ Block::Block(Block &&old) noexcept
   old.pNextWritePageIndex = nullptr;
   old.pValidBits = nullptr;
   old.pErasedBits = nullptr;
-  old.pUnavailableBits = nullptr;
   old.pLPNs = nullptr;
   old.ppLPNs = nullptr;
   old.lastAccessed = 0;
@@ -149,7 +133,6 @@ Block::~Block() {
 
   delete pValidBits;
   delete pErasedBits;
-  delete pUnavailableBits;
 
   if (ppLPNs) {
     for (uint32_t i = 0; i < pageCount; i++) {
@@ -163,7 +146,6 @@ Block::~Block() {
   pLPNs = nullptr;
   pValidBits = nullptr;
   pErasedBits = nullptr;
-  pUnavailableBits = nullptr;
   ppLPNs = nullptr;
 }
 
@@ -187,11 +169,9 @@ Block &Block::operator=(Block &&rhs) {
     pNextWritePageIndex = std::move(rhs.pNextWritePageIndex);
     pValidBits = std::move(rhs.pValidBits);
     pErasedBits = std::move(rhs.pErasedBits);
-    pUnavailableBits = std::move(rhs.pUnavailableBits);
     pLPNs = std::move(rhs.pLPNs);
     validBits = std::move(rhs.validBits);
     erasedBits = std::move(rhs.erasedBits);
-    unavailableBits = std::move(rhs.unavailableBits);
     ppLPNs = std::move(rhs.ppLPNs);
     lastAccessed = std::move(rhs.lastAccessed);
     eraseCount = std::move(rhs.eraseCount);
@@ -199,7 +179,6 @@ Block &Block::operator=(Block &&rhs) {
     rhs.pNextWritePageIndex = nullptr;
     rhs.pValidBits = nullptr;
     rhs.pErasedBits = nullptr;
-    rhs.pUnavailableBits = nullptr;
     rhs.pLPNs = nullptr;
     rhs.ppLPNs = nullptr;
     rhs.lastAccessed = 0;
@@ -273,16 +252,7 @@ uint32_t Block::getDirtyPageCount() {
 }
 
 uint32_t Block::getUnavailablePageCount() {
-  if (ioUnitInPage == 1) {
-    return pUnavailableBits->count();
-  }
-  else {
-    uint32_t ret = 0;
-    for (auto &bitset : unavailableBits) {
-      ret += bitset.count();
-    }
-    return ret;
-  }
+  return salvation->badPageTable.count(this->idx);
 }
 
 float Block::getUnavailablePageRatio() {
@@ -386,25 +356,8 @@ bool Block::write(uint32_t pageIndex, uint64_t lpn, uint32_t idx,
     }
 
     // mjo: Find new available page whose "unavailable" is not set
-    if (salvation.enabled) {
-      auto isDead = [this, idx](uint32_t newPageIndex) {
-        if (ioUnitInPage == 1 && idx == 0) {
-          return pUnavailableBits->test(newPageIndex);
-        }
-        else {
-          return unavailableBits.at(newPageIndex).test(idx);
-        }
-      };
-
-      uint32_t newPageIndex = pageIndex;
-      do {
-        newPageIndex++;
-      } while (newPageIndex < this->pageCount && isDead(newPageIndex));
-      pNextWritePageIndex[idx] = newPageIndex;
-    }
-    else {
-      pNextWritePageIndex[idx] = pageIndex + 1;
-    }
+    pNextWritePageIndex[idx] =
+        pageIndex + 1 + salvation->badPageTable.get(idx, pageIndex);
   }
   else {
     panic("Write to non erased page");
@@ -429,21 +382,10 @@ void Block::erase() {
 
   memset(pNextWritePageIndex, 0, sizeof(uint32_t) * ioUnitInPage);
 
-  if (salvation.enabled) {
+  if (salvation->enabled) {
     for (uint32_t idx = 0; idx < ioUnitInPage; ++idx) {
-      auto isDead = [this, idx](uint32_t newPageIndex) {
-        if (ioUnitInPage == 1 && idx == 0) {
-          return pUnavailableBits->test(newPageIndex);
-        }
-        else {
-          return unavailableBits.at(newPageIndex).test(idx);
-        }
-      };
-
-      while (pNextWritePageIndex[idx] < this->pageCount &&
-             isDead(pNextWritePageIndex[idx])) {
-        pNextWritePageIndex[idx]++;
-      }
+      pNextWritePageIndex[idx] = 0;
+      pNextWritePageIndex[idx] += salvation->badPageTable.get(this->idx, 0);
     }
   }
 

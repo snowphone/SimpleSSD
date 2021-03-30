@@ -34,7 +34,7 @@ FTL::FTL(ConfigReader &c, DRAM::AbstractDRAM *d) : conf(c), pDRAM(d) {
   param.totalPhysicalBlocks = palparam->superBlock;
   param.totalLogicalBlocks =
       palparam->superBlock *
-      (1 - conf.readFloat(CONFIG_FTL, FTL_OVERPROVISION_RATIO));
+      (1 - conf.readDouble(CONFIG_FTL, FTL_OVERPROVISION_RATIO));
   param.pagesInBlock = palparam->page;
   param.pageSize = palparam->superPageSize;
   param.ioUnitInPage = palparam->pageInSuperPage;

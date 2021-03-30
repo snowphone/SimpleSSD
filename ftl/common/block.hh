@@ -32,7 +32,7 @@ namespace FTL {
 
 class Block {
  private:
-  Salvation salvation;
+  Salvation *salvation;
 
   uint32_t idx;
   uint32_t pageCount;
@@ -43,21 +43,19 @@ class Block {
   // mjo: Each bit represents a page in a block
   Bitset *pValidBits;
   Bitset *pErasedBits;
-  Bitset *pUnavailableBits;
   uint64_t *pLPNs;
 
   // Following variables are used when ioUnitInPage > 1
   // mjo: Each element represents a superpage. Superpage is introduced to minimize a page-mapping table.
   std::vector<Bitset> validBits;
   std::vector<Bitset> erasedBits;
-  std::vector<Bitset> unavailableBits;
   uint64_t **ppLPNs;
 
   uint64_t lastAccessed;
   uint32_t eraseCount;
 
  public:
-  Block(uint32_t, uint32_t, uint32_t, Salvation);
+  Block(uint32_t, uint32_t, uint32_t, Salvation &);
   Block(const Block &);      // Copy constructor
   Block(Block &&) noexcept;  // Move constructor
   ~Block();

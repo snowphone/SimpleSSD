@@ -44,31 +44,42 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
   salvationConfig.enabled =
       conf.readBoolean(CONFIG_FTL, FTL_USE_BAD_BLOCK_SALVATION);
   salvationConfig.unavailablePageThreshold =
-      conf.readFloat(CONFIG_FTL, FTL_UNAVAILABLE_PAGE_THRESHOLD);
-  salvationConfig.initialBadBlockRatio =
-      conf.readFloat(CONFIG_FTL, FTL_INITIAL_BAD_BLOCK_RATIO);
-  salvationConfig.initialBadPageRatio =
-      conf.readFloat(CONFIG_FTL, FTL_INITIAL_BAD_PAGE_RATIO);
+      conf.readDouble(CONFIG_FTL, FTL_UNAVAILABLE_PAGE_THRESHOLD);
+  enum { BITS_PER_BYTE = 8 };
+  salvationConfig.ber = conf.readDouble(CONFIG_FTL, FTL_BER);
+  salvationConfig.per = salvationConfig.ber * param.pageSize * BITS_PER_BYTE;
 
   debugprint(LOG_FTL_PAGE_MAPPING, "Bad-block salvation %s",
              salvationConfig.enabled ? "enabled" : "disabled");
-  debugprint(LOG_FTL_PAGE_MAPPING, "Initial bad block ratio: %f",
-             salvationConfig.initialBadBlockRatio);
-  debugprint(LOG_FTL_PAGE_MAPPING, "Initial bad page ratio: %f",
-             salvationConfig.initialBadPageRatio);
+  debugprint(LOG_FTL_PAGE_MAPPING, "Bit error rate (BER): %e",
+             salvationConfig.ber);
+  debugprint(LOG_FTL_PAGE_MAPPING, "Converted page error rate (PER): %e",
+             salvationConfig.per);
 
   for (uint32_t i = 0; i < param.totalPhysicalBlocks; i++) {
-    if (salvationConfig.enabled) {
-      freeBlocks.emplace_back(
-          Block(i, param.pagesInBlock, param.ioUnitInPage, salvationConfig));
+    auto blk =
+        Block(i, param.pagesInBlock, param.ioUnitInPage, salvationConfig);
+
+    if (salvationConfig.enabled &&
+        blk.getUnavailablePageRatio() <
+            salvationConfig.unavailablePageThreshold) {
+      freeBlocks.emplace_back(std::move(blk));
     }
     else {
-      if (probability() >= salvationConfig.initialBadBlockRatio) {
-        freeBlocks.emplace_back(
-            Block(i, param.pagesInBlock, param.ioUnitInPage, salvationConfig));
-      }
+      if (blk.getUnavailablePageCount() == 0)
+        freeBlocks.emplace_back(std::move(blk));
     }
   }
+
+  uint64_t nTotalPhysicalPages = 0;
+  for (auto &b : freeBlocks) {
+    nTotalPhysicalPages += param.pagesInBlock - b.getUnavailablePageCount();
+  }
+
+  debugprint(LOG_FTL_PAGE_MAPPING, "Designed physical pages: %" PRIu64,
+             param.totalPhysicalBlocks * param.pagesInBlock);
+  debugprint(LOG_FTL_PAGE_MAPPING, "Total physical pages: %" PRIu64,
+             nTotalPhysicalPages);
 
   nFreeBlocks = freeBlocks.size();
   debugprint(LOG_FTL_PAGE_MAPPING,
@@ -111,14 +122,14 @@ bool PageMapping::initialize() {
   nTotalLogicalPages = param.totalLogicalBlocks * param.pagesInBlock;
   // mjo: By modifying this field, you can accelerate the first GC
   nPagesToWarmup =
-      nTotalLogicalPages * conf.readFloat(CONFIG_FTL, FTL_FILL_RATIO);
+      nTotalLogicalPages * conf.readDouble(CONFIG_FTL, FTL_FILL_RATIO);
   nPagesToInvalidate =
-      nTotalLogicalPages * conf.readFloat(CONFIG_FTL, FTL_INVALID_PAGE_RATIO);
+      nTotalLogicalPages * conf.readDouble(CONFIG_FTL, FTL_INVALID_PAGE_RATIO);
   mode = (FILLING_MODE)conf.readUint(CONFIG_FTL, FTL_FILLING_MODE);
   maxPagesBeforeGC =
       param.pagesInBlock *
       (param.totalPhysicalBlocks *
-           (1 - conf.readFloat(CONFIG_FTL, FTL_GC_THRESHOLD_RATIO)) -
+           (1 - conf.readDouble(CONFIG_FTL, FTL_GC_THRESHOLD_RATIO)) -
        param.pageCountToMaxPerf);  // # free blocks to maintain
 
   if (nPagesToWarmup + nPagesToInvalidate > maxPagesBeforeGC) {
@@ -471,7 +482,8 @@ void PageMapping::selectVictimBlock(std::vector<uint32_t> &list,
     // DO NOTHING
   }
   else if (mode == GC_MODE_1) {
-    static const float t = conf.readFloat(CONFIG_FTL, FTL_GC_RECLAIM_THRESHOLD);
+    static const float t =
+        conf.readDouble(CONFIG_FTL, FTL_GC_RECLAIM_THRESHOLD);
 
     nBlocks = param.totalPhysicalBlocks * t - nFreeBlocks;
   }
@@ -863,7 +875,8 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
 
   // GC if needed
   // I assumed that init procedure never invokes GC
-  static float gcThreshold = conf.readFloat(CONFIG_FTL, FTL_GC_THRESHOLD_RATIO);
+  static float gcThreshold =
+      conf.readDouble(CONFIG_FTL, FTL_GC_THRESHOLD_RATIO);
 
   if (freeBlockRatio() < gcThreshold) {
     if (!sendToPAL) {

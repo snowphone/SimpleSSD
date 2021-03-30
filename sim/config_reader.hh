@@ -67,7 +67,7 @@ class ConfigReader {
 
   int64_t readInt(CONFIG_SECTION, uint32_t);
   uint64_t readUint(CONFIG_SECTION, uint32_t);
-  float readFloat(CONFIG_SECTION, uint32_t);
+  double readDouble(CONFIG_SECTION, uint32_t);
   std::string readString(CONFIG_SECTION, uint32_t);
   bool readBoolean(CONFIG_SECTION, uint32_t);
 
