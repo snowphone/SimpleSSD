@@ -45,28 +45,29 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
       conf.readBoolean(CONFIG_FTL, FTL_USE_BAD_BLOCK_SALVATION);
   salvationConfig.unavailablePageThreshold =
       conf.readFloat(CONFIG_FTL, FTL_UNAVAILABLE_PAGE_THRESHOLD);
-  salvationConfig.initialBadBlockRatio =
-      conf.readFloat(CONFIG_FTL, FTL_INITIAL_BAD_BLOCK_RATIO);
-  salvationConfig.initialBadPageRatio =
-      conf.readFloat(CONFIG_FTL, FTL_INITIAL_BAD_PAGE_RATIO);
+  salvationConfig.ber = conf.readFloat(CONFIG_FTL, FTL_BER);
+  salvationConfig.per = salvationConfig.ber * param.pageSize;
+
 
   debugprint(LOG_FTL_PAGE_MAPPING, "Bad-block salvation %s",
              salvationConfig.enabled ? "enabled" : "disabled");
-  debugprint(LOG_FTL_PAGE_MAPPING, "Initial bad block ratio: %f",
-             salvationConfig.initialBadBlockRatio);
-  debugprint(LOG_FTL_PAGE_MAPPING, "Initial bad page ratio: %f",
-             salvationConfig.initialBadPageRatio);
+  debugprint(LOG_FTL_PAGE_MAPPING, "Bit error rate (BER): %f",
+             salvationConfig.ber);
+  debugprint(LOG_FTL_PAGE_MAPPING, "Converted page error rate (PER): %f",
+             salvationConfig.per);
 
   for (uint32_t i = 0; i < param.totalPhysicalBlocks; i++) {
-    if (salvationConfig.enabled) {
-      freeBlocks.emplace_back(
-          Block(i, param.pagesInBlock, param.ioUnitInPage, salvationConfig));
+    auto blk =
+        Block(i, param.pagesInBlock, param.ioUnitInPage, salvationConfig);
+
+    if (salvationConfig.enabled &&
+        blk.getUnavailablePageRatio() <
+            salvationConfig.unavailablePageThreshold) {
+      freeBlocks.emplace_back(std::move(blk));
     }
     else {
-      if (probability() >= salvationConfig.initialBadBlockRatio) {
-        freeBlocks.emplace_back(
-            Block(i, param.pagesInBlock, param.ioUnitInPage, salvationConfig));
-      }
+      if (blk.getUnavailablePageCount() == 0)
+        freeBlocks.emplace_back(std::move(blk));
     }
   }
 

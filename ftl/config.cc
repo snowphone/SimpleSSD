@@ -18,6 +18,7 @@
  */
 
 #include "ftl/config.hh"
+#include <string>
 
 #include "util/simplessd.hh"
 
@@ -40,8 +41,7 @@ const char NAME_GC_D_CHOICE_PARAM[] = "DChoiceParam";
 const char NAME_USE_RANDOM_IO_TWEAK[] = "EnableRandomIOTweak";
 const char NAME_USE_BAD_BLOCK_SALVATION[] = "EnableBadBlockSalvation";
 const char NAME_UNAVAILABLE_PAGE_THRESHOLD[] = "UnavailablePageThreshold";
-const char NAME_INITIAL_BAD_BLOCK_RATIO[] = "InitialBadBlockRatio";
-const char NAME_INITIAL_BAD_PAGE_RATIO[] = "InitialBadPageRatio";
+const char NAME_BER[] = "BER";
 
 Config::Config() {
   mapping = PAGE_MAPPING;
@@ -59,8 +59,7 @@ Config::Config() {
   randomIOTweak = true;
   enableBadBlockSalvation = false;
   unavailablePageThreshold = 0.00001;
-  initialBadBlockRatio = 0;
-  initialBadPageRatio = 0;
+  ber = 0;
 }
 
 bool Config::setConfig(const char *name, const char *value) {
@@ -109,13 +108,10 @@ bool Config::setConfig(const char *name, const char *value) {
     enableBadBlockSalvation = convertBool(value);
   }
   else if (MATCH_NAME(NAME_UNAVAILABLE_PAGE_THRESHOLD)) {
-    unavailablePageThreshold = strtof(value, nullptr);
+    unavailablePageThreshold = strtod(value, nullptr);
   }
-  else if (MATCH_NAME(NAME_INITIAL_BAD_BLOCK_RATIO)) {
-    initialBadBlockRatio = strtof(value, nullptr);
-  }
-  else if (MATCH_NAME(NAME_INITIAL_BAD_PAGE_RATIO)) {
-    initialBadPageRatio = strtof(value, nullptr);
+  else if (MATCH_NAME(NAME_BER)) {
+    ber = strtod(value, nullptr);
   }
   else {
     ret = false;
@@ -203,11 +199,8 @@ float Config::readFloat(uint32_t idx) {
     case FTL_UNAVAILABLE_PAGE_THRESHOLD:
       ret = unavailablePageThreshold;
       break;
-    case FTL_INITIAL_BAD_BLOCK_RATIO:
-      ret = initialBadBlockRatio;
-      break;
-    case FTL_INITIAL_BAD_PAGE_RATIO:
-      ret = initialBadPageRatio;
+    case FTL_BER:
+      ret = ber;
       break;
   }
 

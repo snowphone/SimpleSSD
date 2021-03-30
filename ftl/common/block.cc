@@ -66,16 +66,14 @@ Block::Block(uint32_t blockIdx, uint32_t count, uint32_t ioUnit,
     panic("Invalid I/O unit in page");
   }
 
-  if (salvation.enabled) {
-    if (probability() < salvation.initialBadBlockRatio) {
-      std::vector<uint64_t> indexList =
-          sample(0, pageCount - 1, pageCount * salvation.initialBadPageRatio);
-      for (auto i : indexList) {
-        if (ioUnitInPage == 1) {
-          pUnavailableBits->set(i);
-        }
-        else {
-          unavailableBits.at(i).set(0);
+  for (uint64_t i = 0; i < pageCount; ++i) {
+    if (probability(salvation.per)) {
+      if (ioUnitInPage == 1) {
+        pUnavailableBits->set(i);
+      }
+      else {
+        for (uint32_t j = 0; j < ioUnitInPage; ++j) {
+          unavailableBits.at(i).set(j);
         }
       }
     }
