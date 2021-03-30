@@ -177,8 +177,8 @@ uint64_t Config::readUint(uint32_t idx) {
   return ret;
 }
 
-float Config::readFloat(uint32_t idx) {
-  float ret = 0.f;
+double Config::readDouble(uint32_t idx) {
+  double ret = 0.f;
 
   switch (idx) {
     case FTL_OVERPROVISION_RATIO:

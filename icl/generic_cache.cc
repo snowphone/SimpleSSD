@@ -37,7 +37,7 @@ GenericCache::GenericCache(ConfigReader &c, FTL::FTL *f, DRAM::AbstractDRAM *d)
       lineCountInMaxIO(parallelIO * lineCountInSuperPage),
       waySize(conf.readUint(CONFIG_ICL, ICL_WAY_SIZE)),
       prefetchIOCount(conf.readUint(CONFIG_ICL, ICL_PREFETCH_COUNT)),
-      prefetchIORatio(conf.readFloat(CONFIG_ICL, ICL_PREFETCH_RATIO)),
+      prefetchIORatio(conf.readDouble(CONFIG_ICL, ICL_PREFETCH_RATIO)),
       useReadCaching(conf.readBoolean(CONFIG_ICL, ICL_USE_READ_CACHE)),
       useWriteCaching(conf.readBoolean(CONFIG_ICL, ICL_USE_WRITE_CACHE)),
       useReadPrefetch(conf.readBoolean(CONFIG_ICL, ICL_USE_READ_PREFETCH)),

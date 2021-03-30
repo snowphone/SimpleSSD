@@ -91,7 +91,7 @@ LUN::_LUN(bool b, uint8_t n, ConfigReader &cfg) : bWellknown(b), id(n) {
     unitDescriptor[0x0A] = (uint8_t)log2f(lbaSize);  // LBA size
     *(uint64_t *)(unitDescriptor + 0x0B) =
         (totalSize *
-         (1 - cfg.readFloat(CONFIG_FTL, FTL::FTL_OVERPROVISION_RATIO))) /
+         (1 - cfg.readDouble(CONFIG_FTL, FTL::FTL_OVERPROVISION_RATIO))) /
         lbaSize;  // Total logical LBA
     *(uint32_t *)(unitDescriptor + 0x13) =
         blockSize / lbaSize;      // Total LBA in physical block

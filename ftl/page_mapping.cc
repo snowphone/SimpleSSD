@@ -44,16 +44,16 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
   salvationConfig.enabled =
       conf.readBoolean(CONFIG_FTL, FTL_USE_BAD_BLOCK_SALVATION);
   salvationConfig.unavailablePageThreshold =
-      conf.readFloat(CONFIG_FTL, FTL_UNAVAILABLE_PAGE_THRESHOLD);
-  salvationConfig.ber = conf.readFloat(CONFIG_FTL, FTL_BER);
+      conf.readDouble(CONFIG_FTL, FTL_UNAVAILABLE_PAGE_THRESHOLD);
+  salvationConfig.ber = conf.readDouble(CONFIG_FTL, FTL_BER);
   salvationConfig.per = salvationConfig.ber * param.pageSize;
 
 
   debugprint(LOG_FTL_PAGE_MAPPING, "Bad-block salvation %s",
              salvationConfig.enabled ? "enabled" : "disabled");
-  debugprint(LOG_FTL_PAGE_MAPPING, "Bit error rate (BER): %f",
+  debugprint(LOG_FTL_PAGE_MAPPING, "Bit error rate (BER): %e",
              salvationConfig.ber);
-  debugprint(LOG_FTL_PAGE_MAPPING, "Converted page error rate (PER): %f",
+  debugprint(LOG_FTL_PAGE_MAPPING, "Converted page error rate (PER): %e",
              salvationConfig.per);
 
   for (uint32_t i = 0; i < param.totalPhysicalBlocks; i++) {
@@ -112,14 +112,14 @@ bool PageMapping::initialize() {
   nTotalLogicalPages = param.totalLogicalBlocks * param.pagesInBlock;
   // mjo: By modifying this field, you can accelerate the first GC
   nPagesToWarmup =
-      nTotalLogicalPages * conf.readFloat(CONFIG_FTL, FTL_FILL_RATIO);
+      nTotalLogicalPages * conf.readDouble(CONFIG_FTL, FTL_FILL_RATIO);
   nPagesToInvalidate =
-      nTotalLogicalPages * conf.readFloat(CONFIG_FTL, FTL_INVALID_PAGE_RATIO);
+      nTotalLogicalPages * conf.readDouble(CONFIG_FTL, FTL_INVALID_PAGE_RATIO);
   mode = (FILLING_MODE)conf.readUint(CONFIG_FTL, FTL_FILLING_MODE);
   maxPagesBeforeGC =
       param.pagesInBlock *
       (param.totalPhysicalBlocks *
-           (1 - conf.readFloat(CONFIG_FTL, FTL_GC_THRESHOLD_RATIO)) -
+           (1 - conf.readDouble(CONFIG_FTL, FTL_GC_THRESHOLD_RATIO)) -
        param.pageCountToMaxPerf);  // # free blocks to maintain
 
   if (nPagesToWarmup + nPagesToInvalidate > maxPagesBeforeGC) {
@@ -472,7 +472,7 @@ void PageMapping::selectVictimBlock(std::vector<uint32_t> &list,
     // DO NOTHING
   }
   else if (mode == GC_MODE_1) {
-    static const float t = conf.readFloat(CONFIG_FTL, FTL_GC_RECLAIM_THRESHOLD);
+    static const float t = conf.readDouble(CONFIG_FTL, FTL_GC_RECLAIM_THRESHOLD);
 
     nBlocks = param.totalPhysicalBlocks * t - nFreeBlocks;
   }
@@ -864,7 +864,7 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
 
   // GC if needed
   // I assumed that init procedure never invokes GC
-  static float gcThreshold = conf.readFloat(CONFIG_FTL, FTL_GC_THRESHOLD_RATIO);
+  static float gcThreshold = conf.readDouble(CONFIG_FTL, FTL_GC_THRESHOLD_RATIO);
 
   if (freeBlockRatio() < gcThreshold) {
     if (!sendToPAL) {

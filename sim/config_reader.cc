@@ -126,14 +126,14 @@ uint64_t ConfigReader::readUint(CONFIG_SECTION section, uint32_t idx) {
   }
 }
 
-float ConfigReader::readFloat(CONFIG_SECTION section, uint32_t idx) {
+double ConfigReader::readDouble(CONFIG_SECTION section, uint32_t idx) {
   switch (section) {
     case CONFIG_CPU:
       return cpuConfig.readFloat(idx);
     case CONFIG_DRAM:
       return dramConfig.readFloat(idx);
     case CONFIG_FTL:
-      return ftlConfig.readFloat(idx);
+      return ftlConfig.readDouble(idx);
     case CONFIG_NVME:
       return nvmeConfig.readFloat(idx);
     case CONFIG_SATA:

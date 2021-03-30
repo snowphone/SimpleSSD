@@ -99,7 +99,7 @@ class Config : public BaseConfig {
 
   int64_t readInt(uint32_t) override;
   uint64_t readUint(uint32_t) override;
-  float readFloat(uint32_t) override;
+  double readDouble(uint32_t);
   bool readBoolean(uint32_t) override;
 };
 
