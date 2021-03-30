@@ -45,9 +45,9 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
       conf.readBoolean(CONFIG_FTL, FTL_USE_BAD_BLOCK_SALVATION);
   salvationConfig.unavailablePageThreshold =
       conf.readDouble(CONFIG_FTL, FTL_UNAVAILABLE_PAGE_THRESHOLD);
+  enum { BITS_PER_BYTE = 8 };
   salvationConfig.ber = conf.readDouble(CONFIG_FTL, FTL_BER);
-  salvationConfig.per = salvationConfig.ber * param.pageSize;
-
+  salvationConfig.per = salvationConfig.ber * param.pageSize * BITS_PER_BYTE;
 
   debugprint(LOG_FTL_PAGE_MAPPING, "Bad-block salvation %s",
              salvationConfig.enabled ? "enabled" : "disabled");
@@ -472,7 +472,8 @@ void PageMapping::selectVictimBlock(std::vector<uint32_t> &list,
     // DO NOTHING
   }
   else if (mode == GC_MODE_1) {
-    static const float t = conf.readDouble(CONFIG_FTL, FTL_GC_RECLAIM_THRESHOLD);
+    static const float t =
+        conf.readDouble(CONFIG_FTL, FTL_GC_RECLAIM_THRESHOLD);
 
     nBlocks = param.totalPhysicalBlocks * t - nFreeBlocks;
   }
@@ -864,7 +865,8 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
 
   // GC if needed
   // I assumed that init procedure never invokes GC
-  static float gcThreshold = conf.readDouble(CONFIG_FTL, FTL_GC_THRESHOLD_RATIO);
+  static float gcThreshold =
+      conf.readDouble(CONFIG_FTL, FTL_GC_THRESHOLD_RATIO);
 
   if (freeBlockRatio() < gcThreshold) {
     if (!sendToPAL) {
