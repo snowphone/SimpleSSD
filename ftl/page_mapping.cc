@@ -71,6 +71,16 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
     }
   }
 
+  uint64_t nTotalPhysicalPages = 0;
+  for (auto &b : freeBlocks) {
+    nTotalPhysicalPages += param.pagesInBlock - b.getUnavailablePageCount();
+  }
+
+  debugprint(LOG_FTL_PAGE_MAPPING, "Designed physical pages: %" PRIu64,
+             param.totalPhysicalBlocks * param.pagesInBlock);
+  debugprint(LOG_FTL_PAGE_MAPPING, "Total physical pages: %" PRIu64,
+             nTotalPhysicalPages);
+
   nFreeBlocks = freeBlocks.size();
   debugprint(LOG_FTL_PAGE_MAPPING,
              "Logical free blocks: %lu, actual free blocks: %lu",
