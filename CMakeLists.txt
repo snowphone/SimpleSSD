@@ -98,6 +98,9 @@ set(SRC_FTL
   ftl/config.cc
   ftl/ftl.cc
   ftl/page_mapping.cc
+  ftl/hot_list.cc
+  ftl/bad_page_table.cc
+  ftl/block_salvation.cc
 )
 set(SRC_HIL_NVME
   hil/nvme/abstract_subsystem.cc
