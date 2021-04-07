@@ -36,8 +36,10 @@ enum { BITS_PER_BYTE = 8 };
 PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
                          DRAM::AbstractDRAM *d)
     : AbstractFTL(p, l, d), pPAL(l), conf(c), bReclaimMore(false) {
-  cold.lastFreeBlock = vector<uint32_t>(param.pageCountToMaxPerf);
-  cold.lastFreeBlockIOMap = Bitset(param.ioUnitInPage);
+  for (auto &m : metaAry) {
+    m.lastFreeBlock = vector<uint32_t>(param.pageCountToMaxPerf);
+    m.lastFreeBlockIOMap = Bitset(param.ioUnitInPage);
+  }
 
   cold.blocks.reserve(param.totalPhysicalBlocks);
   table.reserve(param.totalLogicalBlocks * param.pagesInBlock);
@@ -117,7 +119,9 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
   // Allocate free blocks
   for (uint32_t i = 0; i < param.pageCountToMaxPerf; i++) {
     for (auto &m : metaAry) {
-      m.lastFreeBlock.at(i) = getFreeBlock(i, m);
+      if (!m.freeBlocks.empty()) {
+        m.lastFreeBlock.at(i) = getFreeBlock(i, m);
+      }
     }
   }
 
@@ -866,7 +870,7 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
   // mjo: If a request is cold or there's not enough hot free blocks, it is
   // written to a cold block.
   if (!isHot || blockIter == hot.blocks.end()) {
-    blockIter = cold.blocks.find(getLastFreeBlock(req.ioFlag, hot));
+    blockIter = cold.blocks.find(getLastFreeBlock(req.ioFlag, cold));
     if (blockIter == cold.blocks.end()) {
       panic("No such block");
     }
