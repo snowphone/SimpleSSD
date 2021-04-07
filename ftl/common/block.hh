@@ -69,8 +69,8 @@ class Block {
   uint32_t getValidPageCount();
   uint32_t getValidPageCountRaw();
   uint32_t getDirtyPageCount();
-  uint32_t getUnavailablePageCount();
-  float getUnavailablePageRatio();
+  uint32_t getUnavailablePageCount() const;
+  float getUnavailablePageRatio() const;
   uint32_t getNextWritePageIndex();
   uint32_t getNextWritePageIndex(uint32_t);
   bool getPageInfo(uint32_t, std::vector<uint64_t> &, Bitset &);

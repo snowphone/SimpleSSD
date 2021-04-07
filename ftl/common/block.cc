@@ -251,11 +251,11 @@ uint32_t Block::getDirtyPageCount() {
   return ret;
 }
 
-uint32_t Block::getUnavailablePageCount() {
+uint32_t Block::getUnavailablePageCount() const {
   return salvation->badPageTable.count(this->idx);
 }
 
-float Block::getUnavailablePageRatio() {
+float Block::getUnavailablePageRatio() const {
   return getUnavailablePageCount() / (float)pageCount;
 }
 

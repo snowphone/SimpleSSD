@@ -20,15 +20,16 @@
 #ifndef __FTL_PAGE_MAPPING__
 #define __FTL_PAGE_MAPPING__
 
+#include <array>
 #include <cinttypes>
 #include <unordered_map>
 #include <vector>
 
 #include "ftl/abstract_ftl.hh"
+#include "ftl/block_salvation.hh"
 #include "ftl/common/block.hh"
 #include "ftl/ftl.hh"
 #include "pal/pal.hh"
-#include "ftl/block_salvation.hh"
 
 namespace SimpleSSD {
 
@@ -45,12 +46,28 @@ class PageMapping : public AbstractFTL {
   // mjo: key - lpn, value - <block#, page# in a block>
   std::unordered_map<uint64_t, std::vector<std::pair<uint32_t, uint32_t>>>
       table;
-  std::unordered_map<uint32_t, Block> blocks;
-  std::list<Block> freeBlocks;
-  uint32_t nFreeBlocks;  // For some libraries which std::list::size() is O(n)
-  std::vector<uint32_t> lastFreeBlock;
-  Bitset lastFreeBlockIOMap;
-  uint32_t lastFreeBlockIndex;
+  // mjo: Block layout
+  //
+  //             Total Blocks
+  //  ┌────────────┬───────────┬───────────┐
+  //  │            │           │           │
+  //  └────────────┼───────────┼───────────┘
+  //               │ frontiers │used blocks
+  //               │
+  //   free blocks │         blocks
+
+  enum { COLD, HOT };
+
+  struct BlockMetadata {
+    std::unordered_map<uint32_t, Block> blocks;  // Frontier + used blocks
+    std::list<Block> freeBlocks;
+    std::vector<uint32_t> lastFreeBlock;
+    Bitset lastFreeBlockIOMap;
+    uint32_t lastFreeBlockIndex;
+  };
+
+  array<BlockMetadata, 2> metaAry;
+  BlockMetadata &cold = metaAry[COLD], &hot = metaAry[HOT];
 
   bool bReclaimMore;
   bool bRandomTweak;
@@ -65,10 +82,10 @@ class PageMapping : public AbstractFTL {
 
   float freeBlockRatio();
   uint32_t convertBlockIdx(uint32_t);
-  uint32_t getFreeBlock(uint32_t);
-  uint32_t getLastFreeBlock(Bitset &);
+  uint32_t getFreeBlock(uint32_t, BlockMetadata &);
+  uint32_t getLastFreeBlock(Bitset &, BlockMetadata &);
   void calculateVictimWeight(std::vector<std::pair<uint32_t, float>> &,
-                             const EVICT_POLICY, uint64_t);
+                             const EVICT_POLICY, uint64_t, BlockMetadata &);
   void selectVictimBlock(std::vector<uint32_t> &, uint64_t &);
   void doGarbageCollection(std::vector<uint32_t> &, uint64_t &);
 

@@ -13,6 +13,7 @@ struct Salvation {
   bool enabled;
 
   BadPageTable badPageTable;
+  HotList hotAddressTable;
 
   double unavailablePageThreshold;
   double ber;
