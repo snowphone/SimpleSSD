@@ -137,7 +137,7 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
   // Allocate free blocks
   for (uint32_t i = 0; i < param.pageCountToMaxPerf; i++) {
     for (auto &m : metaAry) {
-      if (!m.freeBlocks.empty()) {
+      if (&m == &cold || HotList::enabled) {
         m.lastFreeBlock.at(i) = getFreeBlock(i, m);
       }
     }
@@ -411,6 +411,13 @@ uint32_t PageMapping::getFreeBlock(uint32_t idx, BlockMetadata &meta) {
   if (idx >= param.pageCountToMaxPerf) {
     panic("Index out of range");
   }
+  // mjo: If hot blocks are short on free blocks, then borrow free blocks from
+  // cold ones.
+  if (&meta == &hot && meta.freeBlocks.empty()) {
+    hot.freeBlocks.emplace_back(std::move(cold.freeBlocks.front()));
+    cold.freeBlocks.pop_front();
+    debugprint(LOG_FTL_PAGE_MAPPING, "Borrow a free block from cold blocks.");
+  }
 
   if (meta.freeBlocks.size() > 0) {
     // Search block which is blockIdx % param.pageCountToMaxPerf == idx
@@ -433,7 +440,7 @@ uint32_t PageMapping::getFreeBlock(uint32_t idx, BlockMetadata &meta) {
 
     // Insert found block to block list
     if (meta.blocks.find(blockIndex) != meta.blocks.end()) {
-      panic("Corrupted");
+      panic("getFreeBlock: Corrupted");
     }
 
     meta.blocks.emplace(blockIndex, std::move(*iter));
@@ -448,6 +455,9 @@ uint32_t PageMapping::getFreeBlock(uint32_t idx, BlockMetadata &meta) {
   return blockIndex;
 }
 
+/**
+ * This is an interface for getting an index of a frontier.
+ */
 uint32_t PageMapping::getLastFreeBlock(Bitset &iomap, BlockMetadata &meta) {
   if (!bRandomTweak || (meta.lastFreeBlockIOMap & iomap).any()) {
     // Update lastFreeBlockIndex
@@ -468,7 +478,7 @@ uint32_t PageMapping::getLastFreeBlock(Bitset &iomap, BlockMetadata &meta) {
 
   // Sanity check
   if (freeBlock == meta.blocks.end()) {
-    panic("Corrupted");
+    panic("getLastFreeBlock: Corrupted");
   }
 
   // If current free block is full, get next block
@@ -1099,8 +1109,9 @@ void PageMapping::eraseInternal(PAL::Request &req, uint64_t &tick) {
     }
 
     // Insert block to free block list
-    if (HotList::enabled) {
-      freeBlocks.emplace(iter, std::move(block->second));
+    // mjo: Check for bad pages and move the free block to a proper container.
+    if (HotList::enabled && block->second.getUnavailablePageCount()) {
+      hot.freeBlocks.emplace(iter, std::move(block->second));
     }
     else {
       cold.freeBlocks.emplace(iter, std::move(block->second));
