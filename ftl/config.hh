@@ -44,6 +44,8 @@ typedef enum {
   FTL_USE_BAD_BLOCK_SALVATION,
   FTL_UNAVAILABLE_PAGE_THRESHOLD,
   FTL_BER,
+  FTL_ENABLE_HOT_COLD,
+  FTL_HOT_COLD_CAPACITY_RATIO,
 
   /* N+K Mapping configuration*/
   FTL_NKMAP_N,
@@ -90,6 +92,8 @@ class Config : public BaseConfig {
   bool enableBadBlockSalvation;
   double unavailablePageThreshold;
   double ber;
+  bool enableHotCold;
+  float hotColdCapacityRatio;
 
  public:
   Config();

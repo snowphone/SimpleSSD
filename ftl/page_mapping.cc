@@ -24,6 +24,7 @@
 #include <limits>
 #include <random>
 
+#include "ftl/config.hh"
 #include "util/algorithm.hh"
 #include "util/bitset.hh"
 
@@ -50,6 +51,8 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
       conf.readDouble(CONFIG_FTL, FTL_UNAVAILABLE_PAGE_THRESHOLD);
   salvationConfig.ber = conf.readDouble(CONFIG_FTL, FTL_BER);
   salvationConfig.per = salvationConfig.ber * param.pageSize * BITS_PER_BYTE;
+  HotList::enabled = salvationConfig.enabled &&
+                     conf.readBoolean(CONFIG_FTL, FTL_ENABLE_HOT_COLD);
 
   debugprint(LOG_FTL_PAGE_MAPPING, "Bad-block salvation %s",
              salvationConfig.enabled ? "enabled" : "disabled");
@@ -93,7 +96,8 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
     }
   }
 
-  float hotAddressTableSizeRatio = 0.1;
+  float hotAddressTableSizeRatio =
+      conf.readDouble(CONFIG_FTL, FTL_HOT_COLD_CAPACITY_RATIO);
   uint64_t hotAddressTableSize = hot.freeBlocks.size() * param.pagesInBlock;
   for (auto &b : hot.freeBlocks) {
     hotAddressTableSize -= b.getUnavailablePageCount();
@@ -829,7 +833,9 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
   bool readBeforeWrite = false;
 
   // mjo: Step 0: Update hotAddressTable.
-  salvationConfig.hotAddressTable.update(req.lpn);
+  if (HotList::enabled) {
+    salvationConfig.hotAddressTable.update(req.lpn);
+  }
 
   // mjo: Step 1: Invalidate previously written  page(s).
 
@@ -877,18 +883,26 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
   // Write data to free block
   // mjo: Get a free block from the free block list.
   // mjo: Unordered_map.find returns an iterator which contains <key, value>
-  bool isHot = salvationConfig.hotAddressTable.contains(req.lpn);
-  if (isHot) {
-    blockIter = hot.blocks.find(getLastFreeBlock(req.ioFlag, hot));
+  if (HotList::enabled) {
+    bool isHot = salvationConfig.hotAddressTable.contains(req.lpn);
+    if (isHot) {
+      blockIter = hot.blocks.find(getLastFreeBlock(req.ioFlag, hot));
+    }
+    // mjo: If a request is cold or there's not enough hot free blocks, it is
+    // written to a cold block.
+    if (!isHot || blockIter == hot.blocks.end()) {
+      blockIter = cold.blocks.find(getLastFreeBlock(req.ioFlag, cold));
+      if (blockIter == cold.blocks.end()) {
+        panic("No such block");
+      }
+    }  // mjo: <ppn of the block, Block instance>
   }
-  // mjo: If a request is cold or there's not enough hot free blocks, it is
-  // written to a cold block.
-  if (!isHot || blockIter == hot.blocks.end()) {
+  else {
     blockIter = cold.blocks.find(getLastFreeBlock(req.ioFlag, cold));
     if (blockIter == cold.blocks.end()) {
       panic("No such block");
     }
-  }  // mjo: <ppn of the block, Block instance>
+  }
   Block &block = blockIter->second;
 
   if (sendToPAL) {

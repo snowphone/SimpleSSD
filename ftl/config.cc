@@ -42,6 +42,8 @@ const char NAME_USE_RANDOM_IO_TWEAK[] = "EnableRandomIOTweak";
 const char NAME_USE_BAD_BLOCK_SALVATION[] = "EnableBadBlockSalvation";
 const char NAME_UNAVAILABLE_PAGE_THRESHOLD[] = "UnavailablePageThreshold";
 const char NAME_BER[] = "BER";
+const char NAME_ENABLE_HOT_COLD[] = "EnableHotCold";
+const char NAME_HOT_COLD_CAPACITY_RATIO[] = "HotColdCapacityRatio";
 
 Config::Config() {
   mapping = PAGE_MAPPING;
@@ -60,6 +62,8 @@ Config::Config() {
   enableBadBlockSalvation = false;
   unavailablePageThreshold = 0.00001;
   ber = 0;
+  enableHotCold = false;
+  hotColdCapacityRatio = 0.;
 }
 
 bool Config::setConfig(const char *name, const char *value) {
@@ -112,6 +116,12 @@ bool Config::setConfig(const char *name, const char *value) {
   }
   else if (MATCH_NAME(NAME_BER)) {
     ber = strtod(value, nullptr);
+  }
+  else if (MATCH_NAME(NAME_ENABLE_HOT_COLD)) {
+    enableHotCold = convertBool(value);
+  }
+  else if (MATCH_NAME(NAME_HOT_COLD_CAPACITY_RATIO)) {
+    hotColdCapacityRatio = strtod(value, nullptr);
   }
   else {
     ret = false;
@@ -202,6 +212,9 @@ double Config::readDouble(uint32_t idx) {
     case FTL_BER:
       ret = ber;
       break;
+    case FTL_HOT_COLD_CAPACITY_RATIO:
+      ret = hotColdCapacityRatio;
+      break;
   }
 
   return ret;
@@ -217,6 +230,9 @@ bool Config::readBoolean(uint32_t idx) {
     case FTL_USE_BAD_BLOCK_SALVATION:
       ret = enableBadBlockSalvation;
       break;
+	case FTL_ENABLE_HOT_COLD:
+	  ret = enableHotCold;
+	  break;
   }
 
   return ret;
