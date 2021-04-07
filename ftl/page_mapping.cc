@@ -93,6 +93,20 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
     }
   }
 
+  float hotAddressTableSizeRatio = 0.1;
+  uint64_t hotAddressTableSize = hot.freeBlocks.size() * param.pagesInBlock;
+  for (auto &b : hot.freeBlocks) {
+    hotAddressTableSize -= b.getUnavailablePageCount();
+  }
+  hotAddressTableSize *= hotAddressTableSizeRatio;
+
+  salvationConfig.hotAddressTable.setSize(hotAddressTableSize);
+
+  debugprint(LOG_FTL_PAGE_MAPPING, "Hot address table-hot block ratio: %f",
+             hotAddressTableSizeRatio);
+  debugprint(LOG_FTL_PAGE_MAPPING, "Trace %" PRIu64 " hot LPNs",
+             hotAddressTableSize);
+
   uint64_t nTotalPhysicalPages = 0;
   for (auto &m : metaAry) {
     auto &blks = m.freeBlocks;
@@ -1071,7 +1085,12 @@ void PageMapping::eraseInternal(PAL::Request &req, uint64_t &tick) {
     }
 
     // Insert block to free block list
-    freeBlocks.emplace(iter, std::move(block->second));
+    if (HotList::enabled) {
+      freeBlocks.emplace(iter, std::move(block->second));
+    }
+    else {
+      cold.freeBlocks.emplace(iter, std::move(block->second));
+    }
   }
   else {
     // Otherwise, treated as bad-block
