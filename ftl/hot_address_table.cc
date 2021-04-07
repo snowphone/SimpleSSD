@@ -1,14 +1,14 @@
-#include "ftl/hot_list.hh"
+#include "ftl/hot_address_table.hh"
 
 namespace SimpleSSD {
 
 namespace FTL {
 
-bool HotList::enabled = true;
+bool HotAddressTable::enabled = true;
 
-HotList::HotList(uint64_t size) : capacity(size) {}
+HotAddressTable::HotAddressTable(uint64_t size) : capacity(size) {}
 
-void HotList::update(uint64_t lpn) {
+void HotAddressTable::update(uint64_t lpn) {
   if (hotList.contains(lpn)) {
     hotList.update(lpn);
   }
@@ -23,16 +23,16 @@ void HotList::update(uint64_t lpn) {
   shirinkToSize();
 }
 
-bool HotList::contains(uint64_t lpn) {
+bool HotAddressTable::contains(uint64_t lpn) {
   return hotList.contains(lpn);
 }
 
-void HotList::setSize(uint64_t size) {
+void HotAddressTable::setSize(uint64_t size) {
   this->capacity = size;
   shirinkToSize();
 }
 
-void HotList::shirinkToSize() {
+void HotAddressTable::shirinkToSize() {
   // If a hot list is not full and candidate entries exist
   while (hotList.size() < capacity && candidateList.size() > 0) {
     // Move candidate items to the hot list.

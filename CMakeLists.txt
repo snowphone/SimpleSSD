@@ -98,7 +98,7 @@ set(SRC_FTL
   ftl/config.cc
   ftl/ftl.cc
   ftl/page_mapping.cc
-  ftl/hot_list.cc
+  ftl/hot_address_table.cc
   ftl/bad_page_table.cc
   ftl/block_salvation.cc
 )

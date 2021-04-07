@@ -10,7 +10,7 @@ namespace SimpleSSD {
 
 namespace FTL {
 
-class HotList {
+class HotAddressTable {
   LRU<uint64_t> hotList;
   LRU<uint64_t> candidateList;
   uint64_t capacity;
@@ -18,7 +18,7 @@ class HotList {
  public:
   static bool enabled;
 
-  HotList(uint64_t size = 0);
+  HotAddressTable(uint64_t size = 0);
 
   void update(uint64_t lpn);
 

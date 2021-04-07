@@ -51,7 +51,7 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
       conf.readDouble(CONFIG_FTL, FTL_UNAVAILABLE_PAGE_THRESHOLD);
   salvationConfig.ber = conf.readDouble(CONFIG_FTL, FTL_BER);
   salvationConfig.per = salvationConfig.ber * param.pageSize * BITS_PER_BYTE;
-  HotList::enabled = salvationConfig.enabled &&
+  HotAddressTable::enabled = salvationConfig.enabled &&
                      conf.readBoolean(CONFIG_FTL, FTL_ENABLE_HOT_COLD);
 
   debugprint(LOG_FTL_PAGE_MAPPING, "Bad-block salvation %s",
@@ -61,14 +61,14 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
   debugprint(LOG_FTL_PAGE_MAPPING, "Converted page error rate (PER): %e",
              salvationConfig.per);
   debugprint(LOG_FTL_PAGE_MAPPING, "Hot-cold separation %s",
-             HotList::enabled ? "enabled" : "disabled");
+             HotAddressTable::enabled ? "enabled" : "disabled");
 
   for (uint32_t i = 0; i < param.totalPhysicalBlocks; i++) {
     auto blk =
         Block(i, param.pagesInBlock, param.ioUnitInPage, salvationConfig);
 
     if (salvationConfig.enabled) {
-      if (HotList::enabled) {
+      if (HotAddressTable::enabled) {
         if (!blk.getUnavailablePageCount()) {
           cold.freeBlocks.emplace_back(std::move(blk));
         }
@@ -137,7 +137,7 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
   // Allocate free blocks
   for (uint32_t i = 0; i < param.pageCountToMaxPerf; i++) {
     for (auto &m : metaAry) {
-      if (&m == &cold || HotList::enabled) {
+      if (&m == &cold || HotAddressTable::enabled) {
         m.lastFreeBlock.at(i) = getFreeBlock(i, m);
       }
     }
@@ -843,7 +843,7 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
   bool readBeforeWrite = false;
 
   // mjo: Step 0: Update hotAddressTable.
-  if (HotList::enabled) {
+  if (HotAddressTable::enabled) {
     salvationConfig.hotAddressTable.update(req.lpn);
   }
 
@@ -893,7 +893,7 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
   // Write data to free block
   // mjo: Get a free block from the free block list.
   // mjo: Unordered_map.find returns an iterator which contains <key, value>
-  if (HotList::enabled) {
+  if (HotAddressTable::enabled) {
     bool isHot = salvationConfig.hotAddressTable.contains(req.lpn);
     if (isHot) {
       blockIter = hot.blocks.find(getLastFreeBlock(req.ioFlag, hot));
@@ -1110,7 +1110,7 @@ void PageMapping::eraseInternal(PAL::Request &req, uint64_t &tick) {
 
     // Insert block to free block list
     // mjo: Check for bad pages and move the free block to a proper container.
-    if (HotList::enabled && block->second.getUnavailablePageCount()) {
+    if (HotAddressTable::enabled && block->second.getUnavailablePageCount()) {
       hot.freeBlocks.emplace(iter, std::move(block->second));
     }
     else {

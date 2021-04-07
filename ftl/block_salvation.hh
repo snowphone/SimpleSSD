@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "ftl/bad_page_table.hh"
-#include "ftl/hot_list.hh"
+#include "ftl/hot_address_table.hh"
 
 namespace SimpleSSD {
 
@@ -13,7 +13,7 @@ struct Salvation {
   bool enabled;
 
   BadPageTable badPageTable;
-  HotList hotAddressTable;
+  HotAddressTable hotAddressTable;
 
   double unavailablePageThreshold;
   double ber;
