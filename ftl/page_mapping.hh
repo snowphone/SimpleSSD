@@ -97,6 +97,8 @@ class PageMapping : public AbstractFTL {
   void trimInternal(Request &, uint64_t &);
   void eraseInternal(PAL::Request &, uint64_t &);
 
+  void borrowFreeBlocks(BlockMetadata& from, BlockMetadata& to, uint32_t n);
+
  public:
   PageMapping(ConfigReader &, Parameter &, PAL::PAL *, DRAM::AbstractDRAM *);
   ~PageMapping();

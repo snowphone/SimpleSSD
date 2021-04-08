@@ -52,7 +52,7 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
   salvationConfig.ber = conf.readDouble(CONFIG_FTL, FTL_BER);
   salvationConfig.per = salvationConfig.ber * param.pageSize * BITS_PER_BYTE;
   HotAddressTable::enabled = salvationConfig.enabled &&
-                     conf.readBoolean(CONFIG_FTL, FTL_ENABLE_HOT_COLD);
+                             conf.readBoolean(CONFIG_FTL, FTL_ENABLE_HOT_COLD);
 
   debugprint(LOG_FTL_PAGE_MAPPING, "Bad-block salvation %s",
              salvationConfig.enabled ? "enabled" : "disabled");
@@ -301,10 +301,12 @@ void PageMapping::write(Request &req, uint64_t &tick) {
   if (req.ioFlag.count() > 0) {
     writeInternal(req, tick);
 
+    auto isHot =
+        salvationConfig.hotAddressTable.contains(req.lpn) ? "hot" : "cold";
     debugprint(LOG_FTL_PAGE_MAPPING,
                "WRITE | LPN %" PRIu64 " | %" PRIu64 " - %" PRIu64 " (%" PRIu64
-               ")",
-               req.lpn, begin, tick, tick - begin);
+               "), %s",
+               req.lpn, begin, tick, tick - begin, isHot);
   }
   else {
     warn("FTL got empty request");
@@ -411,30 +413,34 @@ uint32_t PageMapping::getFreeBlock(uint32_t idx, BlockMetadata &meta) {
   if (idx >= param.pageCountToMaxPerf) {
     panic("Index out of range");
   }
+
   // mjo: If hot blocks are short on free blocks, then borrow free blocks from
-  // cold ones.
-  if (&meta == &hot && meta.freeBlocks.empty()) {
-    hot.freeBlocks.emplace_back(std::move(cold.freeBlocks.front()));
-    cold.freeBlocks.pop_front();
-    debugprint(LOG_FTL_PAGE_MAPPING, "Borrow a free block from cold blocks.");
+  // cold ones. IDK why but GCC has a trouble that empty != (size() == 0).
+  if (meta.freeBlocks.empty()) {
+    auto spareIdx = (&meta - metaAry.data() + 1) % metaAry.size();
+    auto &spare = metaAry[spareIdx];
+
+    auto sz = 1;
+    borrowFreeBlocks(spare, meta, sz);
+
+    debugprint(LOG_FTL_PAGE_MAPPING, "Borrow %lu free blocks from %s blocks.",
+               sz, spareIdx == HOT ? "hot" : "cold");
   }
 
   if (meta.freeBlocks.size() > 0) {
     // Search block which is blockIdx % param.pageCountToMaxPerf == idx
-    auto iter = meta.freeBlocks.begin();
-
-    for (; iter != meta.freeBlocks.end(); iter++) {
-      blockIndex = iter->getBlockIndex();
-
-      if (blockIndex % param.pageCountToMaxPerf == idx) {
-        break;
-      }
-    }
+    auto iter = find_if(
+        meta.freeBlocks.begin(), meta.freeBlocks.end(), [this, idx](Block &b) {
+          return b.getBlockIndex() % this->param.pageCountToMaxPerf == idx;
+        });
 
     // Sanity check
     if (iter == meta.freeBlocks.end()) {
       // Just use first one
       iter = meta.freeBlocks.begin();
+      blockIndex = iter->getBlockIndex();
+    }
+    else {
       blockIndex = iter->getBlockIndex();
     }
 
@@ -894,24 +900,20 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
   // mjo: Get a free block from the free block list.
   // mjo: Unordered_map.find returns an iterator which contains <key, value>
   if (HotAddressTable::enabled) {
-    bool isHot = salvationConfig.hotAddressTable.contains(req.lpn);
+    bool isHot = HotAddressTable::enabled &&
+                 salvationConfig.hotAddressTable.contains(req.lpn);
     if (isHot) {
       blockIter = hot.blocks.find(getLastFreeBlock(req.ioFlag, hot));
     }
-    // mjo: If a request is cold or there's not enough hot free blocks, it is
-    // written to a cold block.
-    if (!isHot || blockIter == hot.blocks.end()) {
+    else {
       blockIter = cold.blocks.find(getLastFreeBlock(req.ioFlag, cold));
-      if (blockIter == cold.blocks.end()) {
-        panic("No such block");
-      }
     }  // mjo: <ppn of the block, Block instance>
   }
   else {
     blockIter = cold.blocks.find(getLastFreeBlock(req.ioFlag, cold));
-    if (blockIter == cold.blocks.end()) {
-      panic("No such block");
-    }
+  }
+  if (blockIter == cold.blocks.end()) {
+    panic("No such block");
   }
   Block &block = blockIter->second;
 
@@ -1125,6 +1127,13 @@ void PageMapping::eraseInternal(PAL::Request &req, uint64_t &tick) {
   blocks.erase(block);
 
   tick += applyLatency(CPU::FTL__PAGE_MAPPING, CPU::ERASE_INTERNAL);
+}
+
+void PageMapping::borrowFreeBlocks(BlockMetadata &from, BlockMetadata &to,
+                                   uint32_t n) {
+  auto it = from.freeBlocks.begin();
+  auto it_end = next(it, n);
+  to.freeBlocks.splice(to.freeBlocks.end(), from.freeBlocks, it, it_end);
 }
 
 float PageMapping::calculateWearLeveling() {
