@@ -23,10 +23,28 @@
 #include <iterator>
 #include <limits>
 #include <random>
+#include <string>
 
 #include "ftl/config.hh"
+#include "sim/trace.hh"
 #include "util/algorithm.hh"
 #include "util/bitset.hh"
+
+#define verify_frontiers()                                                     \
+  do {                                                                         \
+    for (auto &_m : metaAry) {                                                 \
+      for (auto _i : _m.lastFreeBlock) {                                       \
+        auto it = _m.blocks.find(_i);                                          \
+        auto blkIdx = it->second.getBlockIndex();                              \
+        auto pageIdx = it->second.getNextWritePageIndex();                     \
+        if (pageIdx >= param.pagesInBlock) {                                   \
+          debugprint(LOG_FTL_PAGE_MAPPING, "block: %lu page: %lu", blkIdx,     \
+                     pageIdx);                                                 \
+          panic("Shit.");                                                      \
+        }                                                                      \
+      }                                                                        \
+    }                                                                          \
+  } while (0)
 
 namespace SimpleSSD {
 
@@ -138,7 +156,7 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
   for (uint32_t i = 0; i < param.pageCountToMaxPerf; i++) {
     for (auto &m : metaAry) {
       if (&m == &cold || HotAddressTable::enabled) {
-        m.lastFreeBlock.at(i) = getFreeBlock(i, m);
+        m.lastFreeBlock.at(i) = _getFreeBlock(i, m);
       }
     }
   }
@@ -407,7 +425,12 @@ uint32_t PageMapping::convertBlockIdx(uint32_t blockIdx) {
   return blockIdx % param.pageCountToMaxPerf;
 }
 
-uint32_t PageMapping::getFreeBlock(uint32_t idx, BlockMetadata &meta) {
+std::unordered_map<uint32_t, Block>::iterator PageMapping::getFrontier(
+    Bitset &iomap, BlockMetadata &m) {
+  return m.blocks.find(_getLastFreeBlockIdx(iomap, m));
+}
+
+uint32_t PageMapping::_getFreeBlock(uint32_t idx, BlockMetadata &m) {
   uint32_t blockIndex = 0;
 
   if (idx >= param.pageCountToMaxPerf) {
@@ -415,29 +438,29 @@ uint32_t PageMapping::getFreeBlock(uint32_t idx, BlockMetadata &meta) {
   }
 
   // mjo: If hot blocks are short on free blocks, then borrow free blocks from
-  // cold ones. IDK why but GCC has a trouble that empty != (size() == 0).
-  if (meta.freeBlocks.empty()) {
-    auto spareIdx = (&meta - metaAry.data() + 1) % metaAry.size();
+  // cold ones. IDK why but there's trouble that empty != (size() == 0).
+  if (m.freeBlocks.size() == 0) {
+    auto spareIdx = (&m - metaAry.data() + 1) % metaAry.size();
     auto &spare = metaAry[spareIdx];
 
     auto sz = 1;
-    borrowFreeBlocks(spare, meta, sz);
+    borrowFreeBlocks(spare, m, sz);
 
-    debugprint(LOG_FTL_PAGE_MAPPING, "Borrow %lu free blocks from %s blocks.",
+    debugprint(LOG_FTL_PAGE_MAPPING, "Borrow %lu free block from %s blocks.",
                sz, spareIdx == HOT ? "hot" : "cold");
   }
 
-  if (meta.freeBlocks.size() > 0) {
+  if (m.freeBlocks.size() > 0) {
     // Search block which is blockIdx % param.pageCountToMaxPerf == idx
     auto iter = find_if(
-        meta.freeBlocks.begin(), meta.freeBlocks.end(), [this, idx](Block &b) {
+        m.freeBlocks.begin(), m.freeBlocks.end(), [this, idx](Block &b) {
           return b.getBlockIndex() % this->param.pageCountToMaxPerf == idx;
         });
 
     // Sanity check
-    if (iter == meta.freeBlocks.end()) {
+    if (iter == m.freeBlocks.end()) {
       // Just use first one
-      iter = meta.freeBlocks.begin();
+      iter = m.freeBlocks.begin();
       blockIndex = iter->getBlockIndex();
     }
     else {
@@ -445,14 +468,14 @@ uint32_t PageMapping::getFreeBlock(uint32_t idx, BlockMetadata &meta) {
     }
 
     // Insert found block to block list
-    if (meta.blocks.find(blockIndex) != meta.blocks.end()) {
+    if (m.blocks.find(blockIndex) != m.blocks.end()) {
       panic("getFreeBlock: Corrupted");
     }
 
-    meta.blocks.emplace(blockIndex, std::move(*iter));
+    m.blocks.emplace(blockIndex, std::move(*iter));
 
     // Remove found block from free block list
-    meta.freeBlocks.erase(iter);
+    m.freeBlocks.erase(iter);
   }
   else {
     panic("No free block left");
@@ -464,7 +487,7 @@ uint32_t PageMapping::getFreeBlock(uint32_t idx, BlockMetadata &meta) {
 /**
  * This is an interface for getting an index of a frontier.
  */
-uint32_t PageMapping::getLastFreeBlock(Bitset &iomap, BlockMetadata &meta) {
+uint32_t PageMapping::_getLastFreeBlockIdx(Bitset &iomap, BlockMetadata &meta) {
   if (!bRandomTweak || (meta.lastFreeBlockIOMap & iomap).any()) {
     // Update lastFreeBlockIndex
     meta.lastFreeBlockIndex++;
@@ -484,18 +507,52 @@ uint32_t PageMapping::getLastFreeBlock(Bitset &iomap, BlockMetadata &meta) {
 
   // Sanity check
   if (freeBlock == meta.blocks.end()) {
+    auto idx = meta.lastFreeBlock.at(meta.lastFreeBlockIndex);
+
+    bool isHot = &meta == &hot;
+    auto &another = isHot ? cold : hot;
+    const char *location;
+    if (another.blocks.find(idx) != another.blocks.end()) {
+      location = "another";
+    }
+    else if (meta.blocks.find(idx) != meta.blocks.end()) {
+      location = "here";
+    }
+    else if (find_if(meta.freeBlocks.begin(), meta.freeBlocks.end(),
+                     [idx](Block &b) { return b.getBlockIndex() == idx; }) !=
+             meta.freeBlocks.end()) {
+      location = "here freeblocks";
+    }
+    else if (find_if(another.freeBlocks.begin(), another.freeBlocks.end(),
+                     [idx](Block &b) { return b.getBlockIndex() == idx; }) !=
+             another.freeBlocks.end()) {
+      location = "another freeblocks";
+    }
+    else {
+      location = "disappeared";
+    }
+    debugprint(LOG_FTL_PAGE_MAPPING, "free blocks: %lu, %s, actually within %s",
+               meta.freeBlocks.size(), isHot ? "hot" : "cold", location);
     panic("getLastFreeBlock: Corrupted");
   }
 
-  // If current free block is full, get next block
-  if (freeBlock->second.getNextWritePageIndex() == param.pagesInBlock) {
+  auto blkIdx = freeBlock->second.getBlockIndex();
+  auto pgs = freeBlock->second.getNextWritePageIndex();
+  debugprint(LOG_FTL_PAGE_MAPPING, "blk: %lu, page: %lu", blkIdx, pgs);
+
+  // If current free block is full, get next block.
+  // But not an on-demand way, rather preemptive way.
+  uint32_t result = meta.lastFreeBlock.at(meta.lastFreeBlockIndex);
+
+  // mjo: Next: the last page
+  // Next + 1: page.end()
+  if (freeBlock->second.getNextWritePageIndex() + 1 == param.pagesInBlock) {
     meta.lastFreeBlock.at(meta.lastFreeBlockIndex) =
-        getFreeBlock(meta.lastFreeBlockIndex, meta);
+        _getFreeBlock(meta.lastFreeBlockIndex, meta);
 
     bReclaimMore = true;
   }
-
-  return meta.lastFreeBlock.at(meta.lastFreeBlockIndex);
+  return result;
 }
 
 // calculate weight of each block regarding victim selection policy
@@ -512,6 +569,14 @@ void PageMapping::calculateVictimWeight(
         if (iter.second.getNextWritePageIndex() != param.pagesInBlock) {
           // mjo: Pass not fully written blocks
           continue;
+        }
+        auto idx = iter.second.getBlockIndex();
+        if (count(cold.lastFreeBlock.begin(), cold.lastFreeBlock.end(), idx) ||
+            count(hot.lastFreeBlock.begin(), hot.lastFreeBlock.end(), idx)) {
+          auto pageEnd = iter.second.getNextWritePageIndex();
+          auto msg =
+              "You cannot erase blocks in use. Page end: " + to_string(pageEnd);
+          panic(msg.c_str());
         }
 
         // mjo: Store fully written blocks
@@ -669,7 +734,8 @@ void PageMapping::doGarbageCollection(std::vector<uint32_t> &blocksToReclaim,
         // modifying fetching free blocks since for every page to reclaim it
         // fetches a free block.
         // Retrive free block
-        auto freeBlockIter = cold.blocks.find(getLastFreeBlock(bit, cold));
+        auto freeBlockIter = getFrontier(bit, cold);
+        verify_frontiers();
 
         // Issue Read
         req.blockIndex = block->first;
@@ -681,6 +747,7 @@ void PageMapping::doGarbageCollection(std::vector<uint32_t> &blocksToReclaim,
         // Update mapping table
         uint32_t newBlockIdx = freeBlockIter->first;
 
+        // Normally, bitsetSize is just 1 since superpage is disabled.
         for (uint32_t idx = 0; idx < bitsetSize; idx++) {
           // mjo: Invalidate page only if the page is valid.
           // In other words, trimmed pages are skipped and you can save the
@@ -899,22 +966,38 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
   // Write data to free block
   // mjo: Get a free block from the free block list.
   // mjo: Unordered_map.find returns an iterator which contains <key, value>
+  bool isHot = HotAddressTable::enabled &&
+               salvationConfig.hotAddressTable.contains(req.lpn);
   if (HotAddressTable::enabled) {
-    bool isHot = HotAddressTable::enabled &&
-                 salvationConfig.hotAddressTable.contains(req.lpn);
     if (isHot) {
-      blockIter = hot.blocks.find(getLastFreeBlock(req.ioFlag, hot));
+      blockIter = getFrontier(req.ioFlag, hot);
     }
     else {
-      blockIter = cold.blocks.find(getLastFreeBlock(req.ioFlag, cold));
+      blockIter = getFrontier(req.ioFlag, cold);
     }  // mjo: <ppn of the block, Block instance>
   }
   else {
-    blockIter = cold.blocks.find(getLastFreeBlock(req.ioFlag, cold));
+    blockIter = getFrontier(req.ioFlag, cold);
   }
   if (blockIter == cold.blocks.end()) {
     panic("No such block");
   }
+  verify_frontiers();
+
+  // if (bNeedFrontier) {
+  //  if (sendToPAL) {
+  //    if (isHot) {
+  //      hot.lastFreeBlock.at(hot.lastFreeBlockIndex) =
+  //          getFreeBlock(hot.lastFreeBlockIndex, hot);
+  //    }
+  //    else {
+  //      cold.lastFreeBlock.at(cold.lastFreeBlockIndex) =
+  //          getFreeBlock(cold.lastFreeBlockIndex, cold);
+  //    }
+  //  }
+  //  bNeedFrontier = false;
+  //}
+
   Block &block = blockIter->second;
 
   if (sendToPAL) {
@@ -1112,6 +1195,16 @@ void PageMapping::eraseInternal(PAL::Request &req, uint64_t &tick) {
 
     // Insert block to free block list
     // mjo: Check for bad pages and move the free block to a proper container.
+    auto idx = block->second.getBlockIndex();
+    for (auto &m : metaAry) {
+      if (find(m.lastFreeBlock.begin(), m.lastFreeBlock.end(), idx) !=
+          m.lastFreeBlock.end()) {
+        bool isHot = &m == &hot;
+        auto msg = "Block number " + to_string(idx) + " is in " +
+                   (isHot ? "hot" : "cold");
+        panic(msg.c_str());
+      }
+    }
     if (HotAddressTable::enabled && block->second.getUnavailablePageCount()) {
       hot.freeBlocks.emplace(iter, std::move(block->second));
     }
