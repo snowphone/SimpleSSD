@@ -36,7 +36,12 @@ enum { BITS_PER_BYTE = 8 };
 
 PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
                          DRAM::AbstractDRAM *d)
-    : AbstractFTL(p, l, d), pPAL(l), conf(c), bReclaimMore(false) {
+    : AbstractFTL(p, l, d),
+      pPAL(l),
+      conf(c),
+      bReclaimMore(false),
+      validPageAcc(0),
+      validPageCnt(0) {
   for (auto &m : blkClusters) {
     m.lastFreeBlock = vector<uint32_t>(param.pageCountToMaxPerf);
     m.lastFreeBlockIOMap = Bitset(param.ioUnitInPage);
@@ -661,6 +666,8 @@ void PageMapping::doGarbageCollection(std::vector<uint32_t> &blocksToReclaim,
     }
 
     auto block = cIt->blocks.find(iter);
+    validPageAcc += block->second.getValidPageCountRaw();
+    validPageCnt++;
 
     // Copy valid pages to free block
     for (uint32_t pageIndex = 0; pageIndex < param.pagesInBlock; pageIndex++) {
@@ -1218,6 +1225,10 @@ void PageMapping::getStatList(std::vector<Stats> &list, std::string prefix) {
   temp.name = prefix + "page_mapping.wear_leveling";
   temp.desc = "Wear-leveling factor";
   list.push_back(temp);
+
+  temp.name = prefix + "page_mapping.valid_pages";
+  temp.desc = "The average number of valid pages in GCed blocks";
+  list.push_back(temp);
 }
 
 void PageMapping::getStatValues(std::vector<double> &values) {
@@ -1226,6 +1237,7 @@ void PageMapping::getStatValues(std::vector<double> &values) {
   values.push_back(stat.validSuperPageCopies);
   values.push_back(stat.validPageCopies);
   values.push_back(calculateWearLeveling());
+  values.push_back(!validPageCnt ? 0 : (double)validPageAcc / validPageCnt);
 }
 
 void PageMapping::resetStatValues() {

@@ -79,6 +79,8 @@ class PageMapping : public AbstractFTL {
     uint64_t validSuperPageCopies;
     uint64_t validPageCopies;
   } stat;
+  uint64_t validPageAcc;
+  uint64_t validPageCnt;
 
   float freeBlockRatio();
   uint32_t convertBlockIdx(uint32_t);
