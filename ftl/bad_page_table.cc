@@ -9,7 +9,7 @@ void BadPageTable::insert(const uint32_t blkNo, const uint32_t pageNo) {
 
   int32_t prevPageNo;
   for (prevPageNo = pageNo - 1; prevPageNo >= 0; --prevPageNo) {
-    if (bpt[prevPageNo])
+    if (bpt.count(prevPageNo))
       break;
   }
 
@@ -19,6 +19,13 @@ void BadPageTable::insert(const uint32_t blkNo, const uint32_t pageNo) {
   }
   else {
     bpt[pageNo] = 1;
+    prevPageNo = pageNo;
+  }
+
+  auto nextPageNo = prevPageNo + bpt[prevPageNo];
+  if (bpt.count(nextPageNo)) {
+    bpt[prevPageNo] += bpt[nextPageNo];
+    bpt.erase(nextPageNo);
   }
 }
 
