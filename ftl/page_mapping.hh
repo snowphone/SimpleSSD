@@ -58,7 +58,7 @@ class PageMapping : public AbstractFTL {
 
   enum { COLD, HOT };
 
-  struct BlockMetadata {
+  struct BlockCluster {
     std::unordered_map<uint32_t, Block> blocks;  // Frontier + used blocks
     std::list<Block> freeBlocks;
     std::vector<uint32_t> lastFreeBlock;
@@ -66,8 +66,8 @@ class PageMapping : public AbstractFTL {
     uint32_t lastFreeBlockIndex;
   };
 
-  array<BlockMetadata, 2> metaAry;
-  BlockMetadata &cold = metaAry[COLD], &hot = metaAry[HOT];
+  array<BlockCluster, 2> blkClusters;
+  BlockCluster &cold = blkClusters[COLD], &hot = blkClusters[HOT];
 
   bool bReclaimMore;
   bool bRandomTweak;
@@ -82,12 +82,12 @@ class PageMapping : public AbstractFTL {
 
   float freeBlockRatio();
   uint32_t convertBlockIdx(uint32_t);
-  std::unordered_map<uint32_t, Block>::iterator getFrontier(Bitset &,
-                                                            BlockMetadata &);
-  uint32_t _getFreeBlock(uint32_t, BlockMetadata &);
-  uint32_t _getLastFreeBlockIdx(Bitset &, BlockMetadata &);
+  inline std::unordered_map<uint32_t, Block>::iterator getFrontier(
+      Bitset &, BlockCluster &);
+  uint32_t _getFreeBlock(uint32_t, BlockCluster &);
+  uint32_t _getLastFreeBlockIdx(Bitset &, BlockCluster &);
   void calculateVictimWeight(std::vector<std::pair<uint32_t, float>> &,
-                             const EVICT_POLICY, uint64_t, BlockMetadata &);
+                             const EVICT_POLICY, uint64_t, BlockCluster &);
   void selectVictimBlock(std::vector<uint32_t> &, uint64_t &);
   void doGarbageCollection(std::vector<uint32_t> &, uint64_t &);
 
@@ -99,7 +99,7 @@ class PageMapping : public AbstractFTL {
   void trimInternal(Request &, uint64_t &);
   void eraseInternal(PAL::Request &, uint64_t &);
 
-  void borrowFreeBlocks(BlockMetadata &from, BlockMetadata &to, uint32_t n);
+  void borrowFreeBlocks(BlockCluster &from, BlockCluster &to, uint32_t n);
 
  public:
   PageMapping(ConfigReader &, Parameter &, PAL::PAL *, DRAM::AbstractDRAM *);
