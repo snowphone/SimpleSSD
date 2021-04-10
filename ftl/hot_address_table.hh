@@ -26,6 +26,10 @@ class HotAddressTable {
 
   void setSize(uint64_t size);
 
+  uint64_t size() { return capacity; }
+
+  uint64_t hotSize() { return hotList.size(); }
+
  private:
   void shirinkToSize();
 };

@@ -1229,6 +1229,14 @@ void PageMapping::getStatList(std::vector<Stats> &list, std::string prefix) {
   temp.name = prefix + "page_mapping.valid_pages";
   temp.desc = "The average number of valid pages in GCed blocks";
   list.push_back(temp);
+
+  temp.name = prefix + "page_mapping.hot";
+  temp.desc = "The number of hot addresses";
+  list.push_back(temp);
+
+  temp.name = prefix + "page_mapping.hot_capacity";
+  temp.desc = "Capacity of hot addresses";
+  list.push_back(temp);
 }
 
 void PageMapping::getStatValues(std::vector<double> &values) {
@@ -1238,6 +1246,8 @@ void PageMapping::getStatValues(std::vector<double> &values) {
   values.push_back(stat.validPageCopies);
   values.push_back(calculateWearLeveling());
   values.push_back(!validPageCnt ? 0 : (double)validPageAcc / validPageCnt);
+  values.push_back(salvationConfig.hotAddressTable.hotSize());
+  values.push_back(salvationConfig.hotAddressTable.size());
 }
 
 void PageMapping::resetStatValues() {
