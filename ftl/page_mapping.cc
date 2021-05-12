@@ -25,6 +25,7 @@
 #include <random>
 #include <string>
 
+#include "sim/trace.hh"
 #include "util/algorithm.hh"
 #include "util/bitset.hh"
 
@@ -92,6 +93,7 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
         cold.freeBlocks.emplace_back(std::move(blk));
     }
   }
+  debugprint(LOG_FTL_PAGE_MAPPING, "Bad page information: %s", salvationConfig.badPageTable.to_string().c_str());
 
   float hotAddressTableSizeRatio =
       conf.readDouble(CONFIG_FTL, FTL_HOT_COLD_CAPACITY_RATIO);
