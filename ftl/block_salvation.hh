@@ -1,23 +1,35 @@
 #pragma once
 
+#include <functional>
+#include <memory>
+#include <random>
 #include <vector>
 
 #include "ftl/bad_page_table.hh"
 #include "ftl/hot_address_table.hh"
+#include "ftl/error_model.hh"
 
 namespace SimpleSSD {
 
 namespace FTL {
 
-struct Salvation {
+class Salvation {
+  std::unique_ptr<ErrorModel> pModel = nullptr;
+
+ public:
   bool enabled;
 
   BadPageTable badPageTable;
   HotAddressTable hotAddressTable;
-
   double unavailablePageThreshold;
-  double ber;
-  double per;
+
+  void setModel(std::unique_ptr<ErrorModel> &&m);
+
+  double getPer();
+
+  double getBer();
+
+  std::string to_string();
 };
 
 double probability();

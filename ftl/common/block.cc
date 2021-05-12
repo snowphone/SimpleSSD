@@ -65,7 +65,7 @@ Block::Block(uint32_t blockIdx, uint32_t count, uint32_t ioUnit,
   }
 
   for (uint64_t i = 0; i < pageCount; ++i) {
-    if (probability(salvation.per)) {
+    if (probability(salvation.getPer())) {
       salvation.badPageTable.insert(blockIdx, i);
     }
   }

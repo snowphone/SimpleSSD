@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <string>
 
 namespace SimpleSSD {
 
@@ -27,6 +28,11 @@ class BadPageTable {
    * Returns the number of sequential bad pages at O(1).
    */
   uint32_t get(const uint32_t blkNo, const uint32_t pageNo);
+
+  /**
+   * Not for simulation per se, but for debugging and information
+   */
+  std::string to_string();
 };
 
 }  // namespace FTL

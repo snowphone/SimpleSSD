@@ -1,4 +1,8 @@
 #include "ftl/bad_page_table.hh"
+#include <ostream>
+#include <sstream>
+#include <string>
+#include <unordered_map>
 
 namespace SimpleSSD {
 
@@ -30,11 +34,13 @@ void BadPageTable::insert(const uint32_t blkNo, const uint32_t pageNo) {
 }
 
 uint32_t BadPageTable::count(const uint32_t blkNo) {
-  uint32_t acc = 0;
-  for (auto &[k, v] : table[blkNo]) {
-    acc += v;
-  }
-  return acc;
+	if(table.find(blkNo) == table.end())
+		return 0;
+	uint32_t acc = 0;
+	for (auto &[k, v] : table[blkNo]) {
+		acc += v;
+	}
+	return acc;
 }
 
 uint32_t BadPageTable::get(const uint32_t blkNo, const uint32_t pageNo) {
@@ -45,6 +51,24 @@ uint32_t BadPageTable::get(const uint32_t blkNo, const uint32_t pageNo) {
   auto &bpt = bbt_it->second;
   auto it = bpt.find(pageNo);
   return it != bpt.end() ? it->second : 0;
+}
+
+template<typename K, typename V>
+std::ostream& operator<<(std::ostream& os, const std::unordered_map<K, V>& m) {
+	os << "{";
+	for(auto it = m.begin(); it != m.end(); ++it) {
+		os << it->first << ": " << it->second;
+		if(std::next(it) != m.end())
+			os << ", ";
+	}
+	os << "}";
+	return os;
+}
+
+std::string BadPageTable::to_string() {
+	std::stringstream ss;
+	ss << table;
+	return ss.str();
 }
 
 }  // namespace FTL
