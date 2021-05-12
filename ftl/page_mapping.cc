@@ -32,8 +32,6 @@ namespace SimpleSSD {
 
 namespace FTL {
 
-enum { BITS_PER_BYTE = 8 };
-
 PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
                          DRAM::AbstractDRAM *d)
     : AbstractFTL(p, l, d),
@@ -54,19 +52,13 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
       conf.readBoolean(CONFIG_FTL, FTL_USE_BAD_BLOCK_SALVATION);
   salvationConfig.unavailablePageThreshold =
       conf.readDouble(CONFIG_FTL, FTL_UNAVAILABLE_PAGE_THRESHOLD);
-  salvationConfig.ber = conf.readDouble(CONFIG_FTL, FTL_BER);
-  salvationConfig.per = salvationConfig.ber * param.pageSize * BITS_PER_BYTE;
+  double ber = conf.readDouble(CONFIG_FTL, FTL_BER);
+  double sigma = conf.readDouble(CONFIG_FTL, FTL_SIGMA);
+  salvationConfig.setModel(make_unique<LogNormal>(ber, sigma, param.pageSize));
   HotAddressTable::enabled = salvationConfig.enabled &&
                              conf.readBoolean(CONFIG_FTL, FTL_ENABLE_HOT_COLD);
 
-  debugprint(LOG_FTL_PAGE_MAPPING, "Bad-block salvation %s",
-             salvationConfig.enabled ? "enabled" : "disabled");
-  debugprint(LOG_FTL_PAGE_MAPPING, "Bit error rate (BER): %e",
-             salvationConfig.ber);
-  debugprint(LOG_FTL_PAGE_MAPPING, "Converted page error rate (PER): %e",
-             salvationConfig.per);
-  debugprint(LOG_FTL_PAGE_MAPPING, "Hot-cold separation %s",
-             HotAddressTable::enabled ? "enabled" : "disabled");
+  debugprint(LOG_FTL_PAGE_MAPPING, "%s", salvationConfig.to_string().c_str());
 
   for (uint32_t i = 0; i < param.totalPhysicalBlocks; i++) {
     auto blk =

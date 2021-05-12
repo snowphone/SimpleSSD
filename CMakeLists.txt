@@ -101,6 +101,7 @@ set(SRC_FTL
   ftl/hot_address_table.cc
   ftl/bad_page_table.cc
   ftl/block_salvation.cc
+  ftl/error_model.cc
 )
 set(SRC_HIL_NVME
   hil/nvme/abstract_subsystem.cc
