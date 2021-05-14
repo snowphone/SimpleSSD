@@ -19,15 +19,11 @@ static double to_per(double ber, uint32_t pageSize) {
 }
 
 LogNormal::LogNormal(double ber, double sigma, uint32_t pageSize) {
-  auto mode_to_mu = [mode = this->mode, sigma] {
-    return log(mode) + (sigma * sigma);
-  };
-
   this->setBer(ber);
   this->sigma = sigma;
   this->mode = to_per(ber, pageSize);  // Regarded as a mode of log-normal
 
-  this->mu = mode_to_mu();
+  this->mu = log(mode) + (sigma * sigma);
   this->dist = std::lognormal_distribution<>(this->mu, this->sigma);
 }
 
