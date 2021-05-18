@@ -357,7 +357,7 @@ bool Block::write(uint32_t pageIndex, uint64_t lpn, uint32_t idx,
 
     // mjo: Find new available page whose "unavailable" is not set
     pNextWritePageIndex[idx] =
-        pageIndex + 1 + salvation->badPageTable.get(idx, pageIndex);
+        pageIndex + 1 + salvation->badPageTable.get(idx, pageIndex + 1);
   }
   else {
     panic("Write to non erased page");
