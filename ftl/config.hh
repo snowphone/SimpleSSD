@@ -47,6 +47,7 @@ typedef enum {
   FTL_SIGMA,
   FTL_ENABLE_HOT_COLD,
   FTL_HOT_COLD_CAPACITY_RATIO,
+  FTL_USE_COMPETITOR,
 
   /* N+K Mapping configuration*/
   FTL_NKMAP_N,
@@ -96,6 +97,7 @@ class Config : public BaseConfig {
   double sigma;
   bool enableHotCold;
   float hotColdCapacityRatio;
+  bool use_competitor;
 
  public:
   Config();

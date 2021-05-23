@@ -8,6 +8,7 @@
 #include "ftl/bad_page_table.hh"
 #include "ftl/hot_address_table.hh"
 #include "ftl/error_model.hh"
+#include "ftl/prev_work/smt.hh"
 
 namespace SimpleSSD {
 
@@ -20,6 +21,7 @@ class Salvation {
   bool enabled;
 
   BadPageTable badPageTable;
+  std::unique_ptr<SMT> smt;
   HotAddressTable hotAddressTable;
   double unavailablePageThreshold;
 

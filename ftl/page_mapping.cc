@@ -59,8 +59,6 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
   HotAddressTable::enabled = salvationConfig.enabled &&
                              conf.readBoolean(CONFIG_FTL, FTL_ENABLE_HOT_COLD);
 
-  debugprint(LOG_FTL_PAGE_MAPPING, "%s", salvationConfig.to_string().c_str());
-
   for (uint32_t i = 0; i < param.totalPhysicalBlocks; i++) {
     auto blk =
         Block(i, param.pagesInBlock, param.ioUnitInPage, salvationConfig);
@@ -93,7 +91,20 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
         cold.freeBlocks.emplace_back(std::move(blk));
     }
   }
-  debugprint(LOG_FTL_PAGE_MAPPING, "Bad page information: %s", salvationConfig.badPageTable.to_string().c_str());
+  bool use_competitor = conf.readBoolean(CONFIG_FTL, FTL_USE_COMPETITOR);
+  if (use_competitor && salvationConfig.enabled) {
+    panic("Both proposed scheme and competitor's scheme cannot be enabled");
+  }
+
+  if (use_competitor) {
+    salvationConfig.smt =
+        make_unique<SMT>(salvationConfig.badPageTable, param.pageSize);
+  }
+
+  debugprint(LOG_FTL_PAGE_MAPPING, "%s", salvationConfig.to_string().c_str());
+  debugprint(LOG_FTL_PAGE_MAPPING, "Bad page information: %s",
+             salvationConfig.badPageTable.to_string().c_str());
+  debugprint(LOG_FTL_PAGE_MAPPING, "Competitor? %s", use_competitor ? "true" : "false");
 
   float hotAddressTableSizeRatio =
       conf.readDouble(CONFIG_FTL, FTL_HOT_COLD_CAPACITY_RATIO);
@@ -944,6 +955,7 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
       // another block.
       uint32_t pageIndex = block.getNextWritePageIndex(idx);
       auto &mapping = mappingList->second.at(idx);
+
 
       beginAt = tick;
 

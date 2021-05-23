@@ -45,6 +45,7 @@ const char NAME_BER[] = "BER";
 const char NAME_SIGMA[] = "Sigma";
 const char NAME_ENABLE_HOT_COLD[] = "EnableHotCold";
 const char NAME_HOT_COLD_CAPACITY_RATIO[] = "HotColdCapacityRatio";
+const char NAME_USE_COMPETITOR[] = "UseCompetitor";
 
 Config::Config() {
   mapping = PAGE_MAPPING;
@@ -65,6 +66,7 @@ Config::Config() {
   ber = 0;
   enableHotCold = false;
   hotColdCapacityRatio = 0.;
+  use_competitor = false;
 }
 
 bool Config::setConfig(const char *name, const char *value) {
@@ -126,6 +128,9 @@ bool Config::setConfig(const char *name, const char *value) {
   }
   else if (MATCH_NAME(NAME_HOT_COLD_CAPACITY_RATIO)) {
     hotColdCapacityRatio = strtod(value, nullptr);
+  }
+  else if (MATCH_NAME(NAME_USE_COMPETITOR)) {
+    use_competitor = convertBool(value);
   }
   else {
     ret = false;
@@ -240,6 +245,8 @@ bool Config::readBoolean(uint32_t idx) {
 	case FTL_ENABLE_HOT_COLD:
 	  ret = enableHotCold;
 	  break;
+	case FTL_USE_COMPETITOR:
+	  ret = use_competitor;
   }
 
   return ret;
