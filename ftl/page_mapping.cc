@@ -856,6 +856,23 @@ void PageMapping::readInternal(Request &req, uint64_t &tick) {
 }
 
 void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
+/**
+ * Simple idea for implementing competitive method
+ *
+ * Prerequisite: random access is allowed 🗸
+ *
+ * invalidate(lpn)
+ *
+ * physical_addr := translate(lpn)
+ * backed_addr := try_translation(physical_addr)
+ *
+ *
+ * if no backed_addr:
+ *   do as usual
+ * else
+ *   write(backed_addr)
+ *   physical_addr++
+ */
   PAL::Request palRequest(
       req);  // mjo: Copy ioFlag. IOFlag means pages in a superpage
   std::unordered_map<uint32_t, Block>::iterator blockIter;

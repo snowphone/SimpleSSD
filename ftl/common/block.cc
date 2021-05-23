@@ -336,7 +336,7 @@ bool Block::write(uint32_t pageIndex, uint64_t lpn, uint32_t idx,
   }
 
   if (write) {
-    if (pageIndex < pNextWritePageIndex[idx]) {
+    if (!salvation->smt && pageIndex < pNextWritePageIndex[idx]) {
       panic("Write to block should sequential");
     }
 
