@@ -20,6 +20,7 @@
 #ifndef __FTL_COMMON_BLOCK__
 #define __FTL_COMMON_BLOCK__
 
+#include <bits/stdint-uintn.h>
 #include <cinttypes>
 #include <vector>
 
@@ -71,6 +72,7 @@ class Block {
   uint32_t getDirtyPageCount();
   uint32_t getUnavailablePageCount() const;
   float getUnavailablePageRatio() const;
+  void incrementIndex(uint32_t);
   uint32_t getNextWritePageIndex();
   uint32_t getNextWritePageIndex(uint32_t);
   bool getPageInfo(uint32_t, std::vector<uint64_t> &, Bitset &);

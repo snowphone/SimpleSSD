@@ -18,6 +18,7 @@
  */
 
 #include "ftl/common/block.hh"
+#include <bits/stdint-uintn.h>
 
 #include <algorithm>
 #include <cstring>
@@ -25,6 +26,7 @@
 #include <random>
 #include <tuple>
 #include <utility>
+#include "sim/trace.hh"
 
 namespace SimpleSSD {
 
@@ -316,6 +318,13 @@ bool Block::read(uint32_t pageIndex, uint32_t idx, uint64_t tick) {
   }
 
   return read;
+}
+
+void Block::incrementIndex(uint32_t i) {
+	if(!salvation->smt) {
+		panic("Only competitive method is allowed.");
+	}
+	pNextWritePageIndex[i]++;
 }
 
 bool Block::write(uint32_t pageIndex, uint64_t lpn, uint32_t idx,

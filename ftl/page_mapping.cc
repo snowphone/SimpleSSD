@@ -840,6 +840,15 @@ void PageMapping::readInternal(Request &req, uint64_t &tick) {
             panic("Block is not in use");
           }
 
+		  if(salvationConfig.smt) {
+			  auto new_idx = salvationConfig.smt->get(block->second.getBlockIndex(), palRequest.pageIndex);
+			  if(new_idx.has_value()) {
+				  auto[blkIdx, pgIdx] = new_idx.value();
+				  block = cold.blocks.find(blkIdx);
+				  palRequest.pageIndex = pgIdx;
+			  }
+		  }
+
           beginAt = tick;
 
           block->second.read(palRequest.pageIndex, idx, beginAt);
@@ -973,6 +982,18 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
       uint32_t pageIndex = block.getNextWritePageIndex(idx);
       auto &mapping = mappingList->second.at(idx);
 
+	  if(salvationConfig.smt) {
+		  auto new_idx = salvationConfig.smt->get(block.getBlockIndex(), pageIndex);
+		  if(new_idx.has_value()) {
+			  auto[blkIdx, pgIdx] = new_idx.value();
+
+			  block.incrementIndex(idx);
+
+			  blockIter = cold.blocks.find(blkIdx); // Set backed address
+			  block = blockIter->second;
+			  pageIndex = pgIdx;
+		  }
+	  }
 
       beginAt = tick;
 
