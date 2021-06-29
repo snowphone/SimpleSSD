@@ -322,7 +322,7 @@ bool Block::read(uint32_t pageIndex, uint32_t idx, uint64_t tick) {
 
 void Block::incrementIndex(uint32_t i) {
 	if(!salvation->smt) {
-		panic("Only competitive method is allowed.");
+		panic("Only competing method is allowed.");
 	}
 	pNextWritePageIndex[i]++;
 }
@@ -346,7 +346,7 @@ bool Block::write(uint32_t pageIndex, uint64_t lpn, uint32_t idx,
 
   if (write) {
     if (!salvation->smt && pageIndex < pNextWritePageIndex[idx]) {
-      panic("Write to block should sequential");
+      panic("Write to block should be sequential");
     }
 
     lastAccessed = tick;
@@ -374,7 +374,7 @@ bool Block::write(uint32_t pageIndex, uint64_t lpn, uint32_t idx,
     }
   }
   else {
-    panic("Write to non erased page");
+    panic("Write to non erased page at block %lu, page %lu", this->idx, pageIndex);
   }
 
   return write;
