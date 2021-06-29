@@ -1,7 +1,5 @@
 #pragma once
 
-#include <bits/stdint-uintn.h>
-
 #include <optional>
 #include <unordered_map>
 #include <utility>
@@ -26,6 +24,7 @@ class SMT {
   SMT(const BadPageTable &bpt, uint32_t pageLen);
   bool contains(uint32_t blkIdx, uint32_t pageIdx);
   std::optional<Pair> get(uint32_t blkIdx, uint32_t pageIdx);
+  bool isBackingblock(uint32_t blkIdx);
 };
 }  // namespace FTL
 }  // namespace SimpleSSD

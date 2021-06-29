@@ -1,4 +1,4 @@
-#include "ftl/prev_work//smt.hh"
+#include "ftl/prev_work/smt.hh"
 
 #include <bits/stdint-uintn.h>
 
@@ -22,11 +22,13 @@ SMT::SMT(const BadPageTable &bpt, uint32_t pageLen) : pageLen(pageLen) {
   }
   auto backingIdx = counter.begin()->first;
   auto backingPageIdx = bpt.get(backingIdx, 0);
-  for (auto it = bpt.table.begin(); it != bpt.table.end(); ++it) {
-    auto blkIdx = it->first;
+  for (auto badBlockIt = bpt.table.begin(); badBlockIt != bpt.table.end();
+       ++badBlockIt) {
+    auto blkIdx = badBlockIt->first;
     if (blkIdx == backingIdx)
       continue;
-    for (auto jt = it->second.begin(); jt != it->second.end(); ++jt) {
+    for (auto jt = badBlockIt->second.begin(); jt != badBlockIt->second.end();
+         ++jt) {
       for (uint32_t pageIdx = jt->first; pageIdx < jt->first + jt->second;
            ++pageIdx) {
         // Insert index
@@ -37,7 +39,7 @@ SMT::SMT(const BadPageTable &bpt, uint32_t pageLen) : pageLen(pageLen) {
 
         // Get a new backing block if required
         if (backingPageIdx == pageLen) {
-          backingIdx = next(it, 1)->first;
+          backingIdx = next(badBlockIt, 1)->first;
           backingPageIdx = bpt.get(backingIdx, 0);
         }
       }
@@ -55,6 +57,15 @@ std::optional<Pair> SMT::get(uint32_t blkIdx, uint32_t pageIdx) {
     return std::nullopt;
   }
   return it->second;
+}
+
+bool SMT::isBackingblock(uint32_t blkIdx) {
+  for (auto &[_k, v] : this->smt) {
+    auto [blk, _pg] = v;
+    if (blk == blkIdx)
+      return true;
+  }
+  return false;
 }
 
 }  // namespace FTL

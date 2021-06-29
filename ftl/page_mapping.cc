@@ -59,11 +59,16 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
   HotAddressTable::enabled = salvationConfig.enabled &&
                              conf.readBoolean(CONFIG_FTL, FTL_ENABLE_HOT_COLD);
 
+  bool use_competitor = conf.readBoolean(CONFIG_FTL, FTL_USE_COMPETITOR);
+  if (use_competitor && salvationConfig.enabled) {
+    panic("Both proposed scheme and competitor's scheme cannot be enabled");
+  }
+
   for (uint32_t i = 0; i < param.totalPhysicalBlocks; i++) {
     auto blk =
         Block(i, param.pagesInBlock, param.ioUnitInPage, salvationConfig);
 
-    if (salvationConfig.enabled) {
+    if (salvationConfig.enabled || use_competitor) {
       if (HotAddressTable::enabled) {
         if (!blk.getUnavailablePageCount()) {
           cold.freeBlocks.emplace_back(std::move(blk));
@@ -90,10 +95,6 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
       if (blk.getUnavailablePageCount() == 0)
         cold.freeBlocks.emplace_back(std::move(blk));
     }
-  }
-  bool use_competitor = conf.readBoolean(CONFIG_FTL, FTL_USE_COMPETITOR);
-  if (use_competitor && salvationConfig.enabled) {
-    panic("Both proposed scheme and competitor's scheme cannot be enabled");
   }
 
   if (use_competitor) {
@@ -431,7 +432,7 @@ uint32_t PageMapping::_getFreeBlock(uint32_t idx, BlockCluster &c) {
 
   // mjo: If hot blocks are short on free blocks, then borrow free blocks from
   // cold ones. IDK why but there's trouble that empty != (size() == 0).
-  if (c.freeBlocks.size() == 0) {
+  if (&c == &hot && c.freeBlocks.size() == 0) {
     auto spareIdx = (&c - blkClusters.data() + 1) % blkClusters.size();
     auto &spare = blkClusters[spareIdx];
 
@@ -443,11 +444,15 @@ uint32_t PageMapping::_getFreeBlock(uint32_t idx, BlockCluster &c) {
   }
 
   if (c.freeBlocks.size() > 0) {
+    auto smt = salvationConfig.smt.get();
     // Search block which is blockIdx % param.pageCountToMaxPerf == idx
     auto iter = find_if(
         c.freeBlocks.begin(), c.freeBlocks.end(), [this, idx](Block &b) {
           return b.getBlockIndex() % this->param.pageCountToMaxPerf == idx;
         });
+	if(smt->isBackingblock(iter->getBlockIndex())) {
+		panic("Backing block must not be selected");
+	}
 
     // Sanity check
     if (iter == c.freeBlocks.end()) {
@@ -840,15 +845,6 @@ void PageMapping::readInternal(Request &req, uint64_t &tick) {
             panic("Block is not in use");
           }
 
-		  if(salvationConfig.smt) {
-			  auto new_idx = salvationConfig.smt->get(block->second.getBlockIndex(), palRequest.pageIndex);
-			  if(new_idx.has_value()) {
-				  auto[blkIdx, pgIdx] = new_idx.value();
-				  block = cold.blocks.find(blkIdx);
-				  palRequest.pageIndex = pgIdx;
-			  }
-		  }
-
           beginAt = tick;
 
           block->second.read(palRequest.pageIndex, idx, beginAt);
@@ -945,18 +941,12 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
   // mjo: Unordered_map.find returns an iterator which contains <key, value>
   bool isHot = HotAddressTable::enabled &&
                salvationConfig.hotAddressTable.contains(req.lpn);
-  if (isHot) {
-    blockIter = getFrontier(req.ioFlag, hot);
-  }
-  else {
-    blockIter = getFrontier(req.ioFlag, cold);
-  }  // mjo: <ppn of the block, Block instance>
+  // mjo: <ppn of the block, Block instance>
+  blockIter = getFrontier(req.ioFlag, isHot ? hot : cold);
 
   if (blockIter == cold.blocks.end()) {
     panic("No such block");
   }
-
-  Block &block = blockIter->second;
 
   if (sendToPAL) {
     if (bRandomTweak) {
@@ -979,18 +969,22 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
     if (req.ioFlag.test(idx) || !bRandomTweak) {
       // mjo: Use empty page in the same block instead of get a page from
       // another block.
-      uint32_t pageIndex = block.getNextWritePageIndex(idx);
+      uint32_t pageIndex = blockIter->second.getNextWritePageIndex(idx);
       auto &mapping = mappingList->second.at(idx);
 
 	  if(salvationConfig.smt) {
-		  auto new_idx = salvationConfig.smt->get(block.getBlockIndex(), pageIndex);
+		  auto new_idx = salvationConfig.smt->get(blockIter->second.getBlockIndex(), pageIndex);
+
+		  if(salvationConfig.smt->isBackingblock(blockIter->first)) {
+			  panic("Backing block must not be used by writeInternal");
+		  }
 		  if(new_idx.has_value()) {
 			  auto[blkIdx, pgIdx] = new_idx.value();
+			  debugprint(LOG_FTL_PAGE_MAPPING, "Backing page: %lu, %lu", blkIdx, pgIdx);
 
-			  block.incrementIndex(idx);
+			  blockIter->second.incrementIndex(idx);
 
 			  blockIter = cold.blocks.find(blkIdx); // Set backed address
-			  block = blockIter->second;
 			  pageIndex = pgIdx;
 		  }
 	  }
@@ -999,7 +993,7 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
 
       // mjo: idx corresponds to an index of a superpage, so we can just ignore
       // it :) In other words, only pageIndex matters
-      block.write(pageIndex, req.lpn, idx, beginAt);
+      blockIter->second.write(pageIndex, req.lpn, idx, beginAt);
 
       // Read old data if needed (Only executed when bRandomTweak = false)
       // Maybe some other init procedures want to perform 'partial-write'
