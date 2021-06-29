@@ -2,6 +2,7 @@
 
 #include <bits/stdint-uintn.h>
 
+#include <algorithm>
 #include <iterator>
 #include <map>
 #include <optional>
@@ -13,13 +14,18 @@
 namespace SimpleSSD {
 namespace FTL {
 
-SMT::SMT(const BadPageTable &bpt, uint32_t pageLen) : pageLen(pageLen) {
+std::map<uint32_t, uint32_t> SMT::createCounter() {
   std::map<uint32_t, uint32_t> counter;
   for (auto &p : bpt.table) {
     for (auto &i : p.second) {
       counter[p.first] += i.second;
     }
   }
+  return counter;
+}
+
+SMT::SMT(const BadPageTable &bpt, uint32_t pageLen) : bpt(bpt), pageLen(pageLen) {
+  auto counter = createCounter();
   auto backingIdx = counter.begin()->first;
   auto backingPageIdx = bpt.get(backingIdx, 0);
   for (auto badBlockIt = bpt.table.begin(); badBlockIt != bpt.table.end();
@@ -45,6 +51,19 @@ SMT::SMT(const BadPageTable &bpt, uint32_t pageLen) : pageLen(pageLen) {
       }
     }
   }
+}
+
+void SMT::allocatePage(uint32_t blkIdx, uint32_t pageIdx) {
+  auto counter = createCounter();
+  auto backingIdx = counter.begin()->first;
+  auto& backingPageIdx = lastIndex[backingIdx];
+  backingPageIdx = bpt.get(backingIdx, lastIndex[backingIdx]);
+
+
+  smt[{blkIdx, pageIdx}] = {backingIdx, backingPageIdx};
+
+  // Increment page index
+  backingPageIdx += 1 + bpt.get(backingIdx, backingPageIdx + 1);
 }
 
 bool SMT::contains(uint32_t blkIdx, uint32_t pageIdx) {

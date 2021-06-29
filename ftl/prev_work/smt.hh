@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <unordered_map>
+#include <map>
 #include <utility>
 
 #include "ftl/bad_page_table.hh"
@@ -17,8 +18,13 @@ struct hash<Pair> {
 namespace SimpleSSD {
 namespace FTL {
 class SMT {
+  const BadPageTable& bpt;
   uint32_t pageLen;
   std::unordered_map<Pair, Pair> smt;
+  std::unordered_map<uint32_t, uint32_t> lastIndex;
+
+  std::map<uint32_t, uint32_t> createCounter();
+  void allocatePage(uint32_t blkIdx, uint32_t pageIdx);
 
  public:
   SMT(const BadPageTable &bpt, uint32_t pageLen);
