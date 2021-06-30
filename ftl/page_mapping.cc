@@ -99,7 +99,7 @@ PageMapping::PageMapping(ConfigReader &c, Parameter &p, PAL::PAL *l,
 
   if (use_competitor) {
     salvationConfig.smt =
-        make_unique<SMT>(salvationConfig.badPageTable, param.pageSize);
+        make_unique<SMT>(salvationConfig.badPageTable, param.pageSize, this);
   }
 
   debugprint(LOG_FTL_PAGE_MAPPING, "%s", salvationConfig.to_string().c_str());
@@ -444,15 +444,11 @@ uint32_t PageMapping::_getFreeBlock(uint32_t idx, BlockCluster &c) {
   }
 
   if (c.freeBlocks.size() > 0) {
-    auto smt = salvationConfig.smt.get();
     // Search block which is blockIdx % param.pageCountToMaxPerf == idx
     auto iter = find_if(
         c.freeBlocks.begin(), c.freeBlocks.end(), [this, idx](Block &b) {
           return b.getBlockIndex() % this->param.pageCountToMaxPerf == idx;
         });
-	if(smt->isBackingblock(iter->getBlockIndex())) {
-		panic("Backing block must not be selected");
-	}
 
     // Sanity check
     if (iter == c.freeBlocks.end()) {
@@ -973,14 +969,11 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
       auto &mapping = mappingList->second.at(idx);
 
 	  if(salvationConfig.smt) {
-		  auto new_idx = salvationConfig.smt->get(blockIter->second.getBlockIndex(), pageIndex);
+		  auto new_idx = salvationConfig.smt->getAndAllocate(blockIter->second.getBlockIndex(), pageIndex);
 
-		  if(salvationConfig.smt->isBackingblock(blockIter->first)) {
-			  panic("Backing block must not be used by writeInternal");
-		  }
 		  if(new_idx.has_value()) {
 			  auto[blkIdx, pgIdx] = new_idx.value();
-			  debugprint(LOG_FTL_PAGE_MAPPING, "Backing page: %lu, %lu", blkIdx, pgIdx);
+			  debugprint(LOG_FTL_PAGE_MAPPING, "Writing to backing page: %lu, %lu", blkIdx, pgIdx);
 
 			  blockIter->second.incrementIndex(idx);
 

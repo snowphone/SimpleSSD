@@ -36,6 +36,8 @@ namespace SimpleSSD {
 namespace FTL {
 
 class PageMapping : public AbstractFTL {
+  friend class SMT;
+
  private:
   PAL::PAL *pPAL;
 

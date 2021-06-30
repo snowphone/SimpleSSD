@@ -1,7 +1,5 @@
 #include "ftl/prev_work/smt.hh"
 
-#include <bits/stdint-uintn.h>
-
 #include <algorithm>
 #include <iterator>
 #include <map>
@@ -10,9 +8,28 @@
 #include <utility>
 
 #include "ftl/bad_page_table.hh"
+#include "ftl/page_mapping.hh"
 
 namespace SimpleSSD {
 namespace FTL {
+
+#define TODO(MSG) throw runtime_error(MSG)
+
+SMT::SMT(const BadPageTable &bpt, uint32_t pageLen, PageMapping *mapping)
+    : bpt(bpt), mapping(mapping), pageLen(pageLen) {
+  for (auto badBlockIt = bpt.table.begin(); badBlockIt != bpt.table.end();
+       ++badBlockIt) {
+    auto blkIdx = badBlockIt->first;
+    for (auto jt = badBlockIt->second.begin(); jt != badBlockIt->second.end();
+         ++jt) {
+      for (uint32_t pageIdx = jt->first; pageIdx < jt->first + jt->second;
+           ++pageIdx) {
+        // Insert index
+        allocatePage(blkIdx, pageIdx);
+      }
+    }
+  }
+}
 
 std::map<uint32_t, uint32_t> SMT::createCounter() {
   std::map<uint32_t, uint32_t> counter;
@@ -24,46 +41,47 @@ std::map<uint32_t, uint32_t> SMT::createCounter() {
   return counter;
 }
 
-SMT::SMT(const BadPageTable &bpt, uint32_t pageLen) : bpt(bpt), pageLen(pageLen) {
-  auto counter = createCounter();
-  auto backingIdx = counter.begin()->first;
-  auto backingPageIdx = bpt.get(backingIdx, 0);
-  for (auto badBlockIt = bpt.table.begin(); badBlockIt != bpt.table.end();
-       ++badBlockIt) {
-    auto blkIdx = badBlockIt->first;
-    if (blkIdx == backingIdx)
-      continue;
-    for (auto jt = badBlockIt->second.begin(); jt != badBlockIt->second.end();
-         ++jt) {
-      for (uint32_t pageIdx = jt->first; pageIdx < jt->first + jt->second;
-           ++pageIdx) {
-        // Insert index
-        smt[{blkIdx, pageIdx}] = {backingIdx, backingPageIdx};
-
-        // Increment page index
-        backingPageIdx += 1 + bpt.get(backingIdx, backingPageIdx + 1);
-
-        // Get a new backing block if required
-        if (backingPageIdx == pageLen) {
-          backingIdx = next(badBlockIt, 1)->first;
-          backingPageIdx = bpt.get(backingIdx, 0);
-        }
-      }
-    }
-  }
-}
-
+/**
+ * if no backing block or backing block is full
+ *   -> allocate new backing block and move it from freeblocks to blocks
+ *
+ * if blkIdx == backingBlockIndex -> do nothing
+ * else
+ *   Using backing block and index variable, update map.
+ */
 void SMT::allocatePage(uint32_t blkIdx, uint32_t pageIdx) {
-  auto counter = createCounter();
-  auto backingIdx = counter.begin()->first;
-  auto& backingPageIdx = lastIndex[backingIdx];
-  backingPageIdx = bpt.get(backingIdx, lastIndex[backingIdx]);
+  // If backing block not exists or is full
+  if (!backingIndex.initialized ||
+      backingIndex.page >= mapping->param.pagesInBlock) {
+    backingIndex.initialized = true;
 
+    auto counter = createCounter();
+    backingIndex.block = counter.begin()->first;
+    backingIndex.page = bpt.get(backingIndex.block, 0);
+	debugprint(LOG_FTL_PAGE_MAPPING, "Allocate a new backing block %lu", backingIndex.block);
 
-  smt[{blkIdx, pageIdx}] = {backingIdx, backingPageIdx};
+    moveBackingBlock(backingIndex.block);
+  }
+
+  if (blkIdx == backingIndex.block) {
+    return;
+  }
+
+  smt[{blkIdx, pageIdx}] = {backingIndex.block, backingIndex.page};
 
   // Increment page index
-  backingPageIdx += 1 + bpt.get(backingIdx, backingPageIdx + 1);
+  backingIndex.page += 1 + bpt.get(backingIndex.block, backingIndex.page + 1);
+}
+
+void SMT::moveBackingBlock(uint32_t blkIdx) {
+  auto &cold = mapping->cold;
+  auto it = find_if(cold.freeBlocks.begin(), cold.freeBlocks.end(),
+                    [blkIdx](Block &b) { return b.getBlockIndex() == blkIdx; });
+  if (it == cold.freeBlocks.end())
+    return;
+
+  cold.blocks.emplace(it->getBlockIndex(), move(*it));
+  cold.freeBlocks.erase(it);
 }
 
 bool SMT::contains(uint32_t blkIdx, uint32_t pageIdx) {
@@ -85,6 +103,14 @@ bool SMT::isBackingblock(uint32_t blkIdx) {
       return true;
   }
   return false;
+}
+
+std::optional<Pair> SMT::getAndAllocate(uint32_t blkIdx, uint32_t pageIdx) {
+  auto results = this->get(blkIdx, pageIdx);
+  if (results.has_value())
+    allocatePage(blkIdx, pageIdx);
+
+  return results;
 }
 
 }  // namespace FTL
