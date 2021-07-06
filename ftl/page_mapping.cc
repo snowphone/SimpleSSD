@@ -969,16 +969,25 @@ void PageMapping::writeInternal(Request &req, uint64_t &tick, bool sendToPAL) {
       auto &mapping = mappingList->second.at(idx);
 
 	  if(salvationConfig.smt) {
-		  auto new_idx = salvationConfig.smt->getAndAllocate(blockIter->second.getBlockIndex(), pageIndex);
+		  auto cur_blk_idx = blockIter->second.getBlockIndex();
+		  auto new_idx = salvationConfig.smt->getAndAllocate(cur_blk_idx, pageIndex);
 
 		  if(new_idx.has_value()) {
 			  auto[blkIdx, pgIdx] = new_idx.value();
-			  debugprint(LOG_FTL_PAGE_MAPPING, "Writing to backing page: %lu, %lu", blkIdx, pgIdx);
+			  debugprint(LOG_FTL_PAGE_MAPPING, "Writing to backing page:(%lu, %lu) -> (%lu, %lu)", cur_blk_idx, pageIndex, blkIdx, pgIdx);
+
+			  uint64_t _nothing = 0;
+			  palRequest.test = true;
+			  palRequest.blockIndex = cur_blk_idx;
+			  palRequest.pageIndex = pageIndex;
+			  pPAL->write(palRequest, _nothing); // Print log only
+			  palRequest.test = false;
 
 			  blockIter->second.incrementIndex(idx);
 
 			  blockIter = cold.blocks.find(blkIdx); // Set backed address
 			  pageIndex = pgIdx;
+
 		  }
 	  }
 

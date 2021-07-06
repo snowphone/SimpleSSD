@@ -95,6 +95,7 @@ typedef struct _Request {
   uint32_t blockIndex;
   uint32_t pageIndex;
   Bitset ioFlag;
+  bool test = false;
 
   _Request(uint32_t);
   _Request(FTL::Request &);

@@ -124,7 +124,11 @@ void PALOLD::write(Request &req, uint64_t &tick) {
   convertCPDPBP(req, list);
 
   for (auto &iter : list) {
-    printCPDPBP(iter, "WRITE");
+	  if(req.test) {
+		  printCPDPBP(iter, "TEST-WRITE");
+		  continue;
+	  }
+	  printCPDPBP(iter, "WRITE");
 
     pal->submit(cmd, iter);
     stat.writeCount++;
